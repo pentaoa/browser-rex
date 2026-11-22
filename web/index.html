@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <base href="__REXWEB_BASE_PATH__">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#e4e4e5">
+  <title>Browser Rex</title>
+  <script src="static/js/theme.js"></script>
+  <link rel="stylesheet" href="static/monospace.css">
+  <link rel="stylesheet" href="static/workspace.css">
+  <script type="module" src="static/js/workspace.js"></script>
+</head>
+<body>
+  <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="icon-session" viewBox="0 0 24 24"><path d="M14 17H3V4h18v8M7 21h5m-2-4v4"/><circle cx="18" cy="16" r="2"/><path d="M14 22v-1a4 4 0 0 1 8 0v1"/></symbol>
+    <symbol id="icon-terminal" viewBox="0 0 24 24"><path d="m5 5 7 7-7 7m9 0h6"/></symbol>
+    <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></symbol>
+    <symbol id="icon-command" viewBox="0 0 24 24"><path d="M8 8H5a3 3 0 1 1 3-3v14a3 3 0 1 1-3-3h14a3 3 0 1 1-3 3V5a3 3 0 1 1 3 3Z"/></symbol>
+    <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></symbol>
+    <symbol id="icon-right" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M12 5v14"/></symbol>
+    <symbol id="icon-down" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 12h18"/></symbol>
+    <symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m8 10 4 4 4-4"/></symbol>
+    <symbol id="icon-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="icon-sidebar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16M6 8v2m0 3v2"/></symbol>
+    <symbol id="icon-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18M5 7h14M5 17h14"/></symbol>
+    <symbol id="icon-device" viewBox="0 0 24 24"><path d="M5 17V5h14v12M2 19h20M4 17h16"/></symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  </svg>
+  <aside id="navigation" aria-label="Workspace navigation">
+  <header class="tab-bar">
+    <button id="layout-toggle" class="icon-button" aria-label="Use vertical tabs" title="Use vertical tabs" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#icon-sidebar"/></svg></button>
+    <div class="connection-picker">
+      <button id="host-picker" type="button" aria-label="Choose host" aria-haspopup="dialog" aria-expanded="false" aria-controls="host-popover" data-value="">
+        <svg class="icon host-symbol" aria-hidden="true"><use href="#icon-device"/></svg>
+        <span class="sidebar-host-label">主机</span>
+        <span class="connection-text"><strong id="host-label">Local</strong><small id="host-detail">This server</small></span>
+        <svg class="icon chevron" aria-hidden="true"><use href="#icon-chevron"/></svg>
+      </button>
+    </div>
+    <div id="horizontal-tabs"><nav id="windows" aria-label="Terminal tabs"></nav></div>
+    <div class="toolbar-actions">
+      <button class="icon-button" data-op="new-window" data-session aria-label="New tab" title="New tab"><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg></button>
+      <details id="workspace-menu">
+        <summary class="icon-button" aria-label="Workspace menu" title="Workspace menu"><svg class="icon" aria-hidden="true"><use href="#icon-more"/></svg></summary>
+        <div class="workspace-menu-items">
+          <div class="menu-heading">Workspace <span id="session-label">Sessions</span></div>
+          <button id="session-switcher" aria-haspopup="dialog"><svg class="icon" aria-hidden="true"><use href="#icon-session"/></svg>Change session <kbd>⌘K / Ctrl+K</kbd></button>
+          <button id="manage-hosts" aria-haspopup="dialog"><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg>Manage hosts</button>
+          <div class="menu-divider"></div>
+          <button data-op="split-right" data-session><svg class="icon" aria-hidden="true"><use href="#icon-right"/></svg>Split right</button>
+          <button data-op="split-down" data-session><svg class="icon" aria-hidden="true"><use href="#icon-down"/></svg>Split down</button>
+          <button id="find-pane"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg>Find in pane <kbd>⌘F / Ctrl+F</kbd></button>
+          <button id="command-palette" aria-haspopup="dialog"><svg class="icon" aria-hidden="true"><use href="#icon-command"/></svg>All commands <kbd>⇧⌘P</kbd></button>
+          <div class="menu-divider"></div>
+          <div class="theme-setting">
+            <span>外观</span>
+            <div class="theme-choices" role="group" aria-label="外观主题">
+              <button type="button" data-theme-choice="system" aria-pressed="true">跟随系统</button>
+              <button type="button" data-theme-choice="light" aria-pressed="false">亮色</button>
+              <button type="button" data-theme-choice="dark" aria-pressed="false">暗色</button>
+            </div>
+          </div>
+        </div>
+      </details>
+    </div>
+  </header>
+  <nav id="sidebar-hosts" aria-label="Hosts and terminal tabs" hidden></nav>
+  <footer id="sidebar-footer" hidden><div id="sidebar-connection"></div></footer>
+  </aside>
+  <section id="terminal-surface" aria-label="Terminal content">
+  <header id="content-heading"><svg class="icon" aria-hidden="true"><use href="#icon-terminal"/></svg><span id="content-title">Terminal</span></header>
+  <section id="search-bar" role="search" aria-label="Find in focused pane" hidden>
+    <input id="search-text" type="search" maxlength="1024" aria-label="Find in focused pane" placeholder="Find in focused pane…" autocomplete="off" spellcheck="false">
+    <output id="search-results" aria-live="polite">0 matches</output>
+    <button id="search-older" type="button" aria-label="Older match" title="Older match (Enter)">↑</button>
+    <button id="search-newer" type="button" aria-label="Newer match" title="Newer match (Shift+Enter)">↓</button>
+    <button id="search-close" type="button" aria-label="Close search">×</button>
+    <div class="search-options">
+      <label><input id="search-case" type="checkbox">Case sensitive</label>
+      <label><input id="search-word" type="checkbox">Whole word</label>
+      <label><input id="search-regex" type="checkbox">Regex</label>
+    </div>
+  </section>
+  <input id="upload-file" type="file" multiple hidden aria-label="Upload files to focused pane">
+  <p id="status" role="status" aria-live="polite"></p>
+  <main id="workspace" aria-label="Terminal workspace"></main>
+  </section>
+  <div id="host-popover" popover="auto" role="dialog" aria-label="Choose host">
+    <div class="host-search"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg><input id="host-filter" type="search" role="combobox" aria-label="Search hosts" aria-controls="host-options" aria-autocomplete="list" aria-expanded="false" placeholder="Search hosts…" autocomplete="off" spellcheck="false"></div>
+    <div id="host-options" role="listbox" aria-label="Hosts"></div>
+    <p id="host-empty" hidden>No hosts found</p>
+    <footer><button id="picker-manage-hosts" type="button"><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg>Add or manage hosts<kbd>↵</kbd></button></footer>
+  </div>
+  <dialog id="hosts-dialog" aria-labelledby="hosts-title">
+    <div class="chooser-heading"><h1 id="hosts-title">Hosts</h1><button type="button" data-dismiss aria-label="Close hosts">×</button></div>
+    <div id="host-list"></div>
+    <form id="host-form">
+      <h2>Add or edit a connection</h2>
+      <label for="host-name">Name</label><input id="host-name" required maxlength="128" autocomplete="off">
+      <label for="host-address">Rex server URL</label><input id="host-address" type="url" required maxlength="2048" placeholder="https://host.example.ts.net" autocomplete="off" spellcheck="false">
+      <div class="dialog-actions"><button id="host-new" type="button">Clear</button><button id="host-test" type="button">Test connection</button><button type="submit" class="primary">Save</button></div>
+    </form>
+    <output id="host-message" role="status" aria-live="polite"></output>
+  </dialog>
+  <dialog id="chooser" aria-labelledby="chooser-title">
+    <div class="chooser-heading"><h1 id="chooser-title">Sessions</h1><button class="icon-button" data-dismiss aria-label="Close dialog"><svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg></button></div>
+    <input id="chooser-filter" type="search" placeholder="Filter or create…" aria-label="Filter sessions" autocomplete="off" spellcheck="false">
+    <div id="chooser-items" class="chooser-items"></div>
+    <footer><span id="chooser-hint">Select a session to resume it</span><kbd>esc</kbd></footer>
+  </dialog>
+  <dialog id="action-dialog" aria-labelledby="action-title" aria-describedby="action-description">
+    <form id="action-form">
+      <h1 id="action-title"></h1>
+      <p id="action-description"></p>
+      <label id="action-label" for="action-name">Session name</label>
+      <input id="action-name" name="label" maxlength="128" autocomplete="off">
+      <div class="dialog-actions"><button type="button" data-dismiss>Cancel</button><button id="action-submit" type="submit" class="primary">Create session</button></div>
+    </form>
+  </dialog>
+</body>
+</html>

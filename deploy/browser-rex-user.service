@@ -1,0 +1,18 @@
+[Unit]
+Description=Personal Browser Rex terminal service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/browser-rex -mode both -session-socket %t/browser-rex/session.sock -workspace /var/tmp/browser-rex-%U-work
+RuntimeDirectory=browser-rex
+RuntimeDirectoryMode=0700
+UMask=0077
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+KillMode=control-group
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target

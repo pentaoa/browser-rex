@@ -1,0 +1,31 @@
+[Unit]
+Description=Browser Rex terminal service
+After=network.target
+
+[Service]
+Type=simple
+User=browser-rex
+Group=browser-rex
+RuntimeDirectory=browser-rex
+RuntimeDirectoryMode=0700
+StateDirectory=browser-rex browser-rex-work
+StateDirectoryMode=0700
+WorkingDirectory=/var/lib/browser-rex
+ExecStart=/usr/local/bin/browser-rex -mode both -session-socket /run/browser-rex/session.sock -workspace /var/lib/browser-rex-work
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+# User/mount/PID/network namespaces are required by the default shell sandbox.
+# Do not add PrivateUsers=yes or RestrictNamespaces=yes.
+
+[Install]
+WantedBy=multi-user.target
