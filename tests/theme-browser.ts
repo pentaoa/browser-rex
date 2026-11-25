@@ -8,21 +8,24 @@ import {join,resolve} from 'node:path';
 import {chromium,type Browser,type Page} from '../web/node_modules/playwright';
 const scratch=await mkdtemp('/tmp/rexweb-theme-');
 let browser:Browser|undefined,child:ReturnType<typeof spawn>|undefined,logs='';
-async function expectTheme(page:Page,theme:'light'|'dark',preference:string){
+const paletteColors = {obsidian:'#0d0e10',ocean:'#171d28',graphite:'#28292d'};
+async function expectTheme(page:Page,theme:'light'|'dark',preference:string,palette:keyof typeof paletteColors='obsidian'){
+ const background=theme==='dark'?paletteColors[palette]:'#fafafa';
  await page.waitForFunction(({theme,preference})=>document.documentElement.dataset.theme===theme&&document.documentElement.dataset.themePreference===preference,{theme,preference});
- assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--surface').trim()),theme==='dark'?'#2c2c2c':'#fafafa');
+ assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue('--surface').trim()),background);
  assert.equal(await page.locator(`[data-theme-choice="${preference}"]`).getAttribute('aria-pressed'),'true');
+ assert.equal(await page.locator(`[data-palette-choice="${palette}"]`).getAttribute('aria-pressed'),'true');
  // The canvas renderer must redraw too; checking CSS alone misses stale PTYs.
  await page.waitForFunction(expected=>{
   const canvas=document.querySelector<HTMLCanvasElement>('.webterm-terminal canvas');
   if(!canvas||canvas.width<10||canvas.height<10)return false;
   const pixel=canvas.getContext('2d')?.getImageData(canvas.width-5,canvas.height-5,1,1).data;
-  return pixel&&pixel[0]===expected&&pixel[1]===expected&&pixel[2]===expected&&pixel[3]===255;
- },theme==='dark'?44:250);
+  return pixel&&expected.every((component,index)=>pixel[index]===component)&&pixel[3]===255;
+ },[1,3,5].map(index=>parseInt(background.slice(index,index+2),16)));
 }
-async function choose(page:Page,mode:string){
+async function choose(page:Page,mode:string,kind='theme'){
  await page.locator('#workspace-menu summary').click();
- await page.locator(`[data-theme-choice="${mode}"]`).click();
+ await page.locator(`[data-${kind}-choice="${mode}"]`).click();
  assert.equal(await page.locator('#workspace-menu').getAttribute('open'),null);
  await page.waitForFunction(()=>document.activeElement instanceof HTMLTextAreaElement);
 }
@@ -43,6 +46,8 @@ try{
  await choose(page,'light');await expectTheme(page,'light','light');
  await page.emulateMedia({colorScheme:'light'});await page.emulateMedia({colorScheme:'dark'});await expectTheme(page,'light','light');
  await choose(page,'dark');await page.emulateMedia({colorScheme:'light'});await expectTheme(page,'dark','dark');
+ await choose(page,'ocean','palette');await expectTheme(page,'dark','dark','ocean');
+ await choose(page,'graphite','palette');await expectTheme(page,'dark','dark','graphite');
  assert.equal(sockets,initialSockets,'theme switching reconnected the terminal');
  assert(await page.evaluate(()=>(window as any).originalCanvas===document.querySelector('.webterm-terminal canvas')),'theme switching recreated the renderer');
  await page.keyboard.insertText("printf '\\137\\137THEME_OK\\137\\137\\n'");await page.keyboard.press('Enter');
@@ -55,25 +60,27 @@ try{
   await page.reload({waitUntil:'commit'});
   await page.waitForFunction(()=>document.documentElement.dataset.theme==='dark');
   assert.equal(await page.evaluate(()=>document.documentElement.dataset.themePreference),'dark');
+  assert.equal(await page.evaluate(()=>document.documentElement.dataset.palette),'graphite');
  }finally{release();}
- await page.waitForLoadState();await page.unroute('**/static/js/workspace-*.js');await page.locator('.webterm-terminal.-connected').waitFor();await expectTheme(page,'dark','dark');
+ await page.waitForLoadState();await page.unroute('**/static/js/workspace-*.js');await page.locator('.webterm-terminal.-connected').waitFor();await expectTheme(page,'dark','dark','graphite');
  const response=await fetch(origin+'/api/action',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({op:'create',label:'theme-sync'})});
  assert(response.ok);const {session_id}=await response.json();
  const second=await context.newPage();await second.goto(origin+'/?'+new URLSearchParams({session:session_id}));await second.locator('.webterm-terminal.-connected').waitFor();
- await expectTheme(second,'dark','dark');
+ await expectTheme(second,'dark','dark','graphite');
  await second.locator('#workspace-menu summary').click();await second.locator('#manage-hosts').click();
  await second.locator('#host-name').fill('preserve editing focus');
- await choose(page,'light');await expectTheme(second,'light','light');
+ await choose(page,'ocean','palette');await expectTheme(second,'dark','dark','ocean');
+ await choose(page,'light');await expectTheme(second,'light','light','ocean');
  assert.equal(await second.locator('#host-name').inputValue(),'preserve editing focus');
  assert(await second.locator('#host-name').evaluate(el=>el===document.activeElement),'synchronized theme stole dialog focus');
- await choose(page,'system');await expectTheme(page,'light','system');
- await page.emulateMedia({colorScheme:'dark'});await expectTheme(page,'dark','system');await expectTheme(second,'light','system');
+ await choose(page,'system');await expectTheme(page,'light','system','ocean');
+ await page.emulateMedia({colorScheme:'dark'});await expectTheme(page,'dark','system','ocean');await expectTheme(second,'light','system','ocean');
  await second.close();
  // Invalid persisted input must safely fall back to the system preference.
- await page.evaluate(()=>localStorage.setItem('rexweb:theme','invalid'));
+ await page.evaluate(()=>{localStorage.setItem('rexweb:theme','invalid');localStorage.setItem('rexweb:dark-palette','invalid');});
  await page.reload();await page.locator('.webterm-terminal.-connected').waitFor();await expectTheme(page,'dark','system');
  assert.deepEqual(errors,[]);
- console.log(JSON.stringify({result:'passed',checks:['light/dark/system canvas colors','explicit choice overrides OS','live OS changes','no renderer recreation or reconnect','input focus retained','saved theme before workspace load','cross-page preference sync without focus theft','invalid preference fallback'],browserErrors:errors.length}));
+ console.log(JSON.stringify({result:'passed',checks:['light and three dark canvas palettes' ,'explicit choice overrides OS','live OS changes','no renderer recreation or reconnect','input focus retained','saved theme before workspace load','cross-page preference sync without focus theft','invalid preference fallback'],browserErrors:errors.length}));
 }finally{
  if(browser)await browser.close();if(child&&child.exitCode===null){child.kill();await once(child,'exit');}
  await rm(scratch,{recursive:true,force:true});

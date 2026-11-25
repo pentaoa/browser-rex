@@ -27,6 +27,8 @@ try{
   assert.equal(await first.locator('.host-option').count(),1);await first.keyboard.press('Escape');
  }finally{release();}
  await first.locator('.webterm-terminal.-connected').waitFor();await delayed.close();
+ const created=await fetch(origin+'/api/action',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({op:'create',label:'Slow session'})});
+ assert(created.ok);const {session_id:target}=await created.json();
  const context=await browser.newContext();const page=await context.newPage();page.on('pageerror',e=>errors.push(String(e)));
  page.on('console',m=>{if(m.type()==='error'&&!m.location().url.endsWith('/favicon.ico'))errors.push(m.text());});
  const metrics=[];
@@ -44,7 +46,44 @@ try{
   if(run==='warm')assert.equal(resources.reduce((sum,e)=>sum+e.transfer,0),0,'warm navigation downloaded static assets again');
   metrics.push({run,connectedMs,entryBytes:entry.decoded,staticTransfer:resources.reduce((sum,e)=>sum+e.transfer,0)});
  }
- assert.deepEqual(errors,[]);console.log(JSON.stringify({result:'passed',checks:['interactive UI before engine delivery','small UI entry','early single WASM fetch','WOFF2 font','zero warm static transfer'],metrics,browserErrors:errors.length}));
+ // Hold both phases of a user-initiated switch. A constructed canvas must
+ // stay hidden even after the layout request returns and history starts.
+ const targetView=(url:URL)=>url.pathname==='/api/session'&&url.searchParams.get('session')===target;
+ let releaseView!:()=>void;
+ const waitForView=new Promise<void>(resolve=>releaseView=resolve);
+ await page.route(targetView,async route=>{await waitForView;await route.continue();});
+ await page.evaluate(targetID=>{
+  const BrowserSocket=window.WebSocket;
+  window.WebSocket=class extends BrowserSocket {
+   addEventListener(type:string,listener:any,options?:any){
+    if(type!=='message'||new URL(this.url).searchParams.get('session')!==targetID){
+     super.addEventListener(type,listener,options);return;
+    }
+    super.addEventListener('message',event=>{
+     if(typeof event.data==='string'&&JSON.parse(event.data)[0]==='ready'){
+      (window as any).finishTerminalStream=()=>listener.call(this,event);
+     }else listener.call(this,event);
+    },options);
+   }
+  };
+ },target);
+ await page.keyboard.press('Control+k');
+ await page.getByRole('button',{name:'Slow session',exact:true}).click();
+ await page.locator('#session-loading').waitFor();
+ assert.equal(await page.locator('#workspace').getAttribute('aria-busy'),'true');
+ releaseView();
+ await page.locator('.pane .terminal-loading').waitFor();
+ await page.waitForFunction(()=>document.querySelector('.webterm-terminal canvas')!==null);
+ await page.waitForFunction(()=>typeof (window as any).finishTerminalStream==='function');
+ assert.equal(await page.locator('.webterm-terminal canvas').first().evaluate(canvas=>getComputedStyle(canvas).visibility),'hidden');
+ assert.equal(await page.locator('.pane .terminal-loading').evaluate(loader=>getComputedStyle(loader,'::before').animationName),'terminal-spin');
+ await page.emulateMedia({reducedMotion:'reduce'});
+ assert.equal(await page.locator('.pane .terminal-loading').evaluate(loader=>getComputedStyle(loader,'::before').animationName),'none');
+ await page.evaluate(()=>(window as any).finishTerminalStream());
+ await page.locator('.webterm-terminal.-connected').waitFor();
+ await page.locator('.pane .terminal-loading').waitFor({state:'hidden'});
+ assert.equal(await page.locator('.webterm-terminal canvas').first().evaluate(canvas=>getComputedStyle(canvas).visibility),'visible');
+ assert.deepEqual(errors,[]);console.log(JSON.stringify({result:'passed',checks:['interactive UI before engine delivery','small UI entry','early single WASM fetch','WOFF2 font','zero warm static transfer','session and pane spinners, hidden cursor until replay, reduced motion'],metrics,browserErrors:errors.length}));
 }finally{
  if(browser)await browser.close();if(child&&child.exitCode===null){child.kill();await once(child,'exit');}
  await rm(scratch,{recursive:true,force:true});

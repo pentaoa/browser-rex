@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Add three dark palettes, with a high-contrast near-black default.
+- Show a loading spinner until the terminal has consumed its initial history.
+- Use native terminal and session titles in place of generated window names.
+
 ## 0.3.0
 
 - Publish Browser Rex as a standalone project, with Linux AMD64 and ARM64 packages.

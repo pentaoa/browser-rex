@@ -43,13 +43,13 @@ interface View extends Session {
 const sessionLabel = document.querySelector<HTMLElement>("#session-label")!;
 const windows = document.querySelector<HTMLElement>("#windows")!;
 const workspace = document.querySelector<HTMLElement>("#workspace")!;
+const sessionLoading = document.querySelector<HTMLElement>("#session-loading")!;
 const status = document.querySelector<HTMLElement>("#status")!;
 const chooser = document.querySelector<HTMLDialogElement>("#chooser")!;
 const filter = document.querySelector<HTMLInputElement>("#chooser-filter")!;
 const chooserItems = document.querySelector<HTMLElement>("#chooser-items")!;
 const actionDialog = document.querySelector<HTMLDialogElement>("#action-dialog")!;
 const actionName = document.querySelector<HTMLInputElement>("#action-name")!;
-const appearance = matchMedia("(prefers-color-scheme: dark)");
 
 const panes = new Map<string, { element: HTMLElement; terminal?: WebTerminal }>();
 const rendererChoice = new URLSearchParams(location.search).get('renderer') === 'webgpu' ? 'webgpu' : 'canvas';
@@ -215,15 +215,20 @@ function icon(name: string) {
 }
 
 function terminalTheme() {
-  const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : appearance.matches;
+  const root = document.documentElement;
+  const colors = getComputedStyle(root);
+  const color = (token: string) => colors.getPropertyValue(token).trim();
+  const dark = root.dataset.theme === "dark";
+  const preset = root.dataset.palette === "ocean" ? "tokyo" : root.dataset.palette === "graphite" ? "github" : "catppuccin";
+  const background = color("--surface");
   return {
-    ...terminalClass?.getTheme("tango"),
-    background: dark ? "#2c2c2c" : "#fafafa",
-    foreground: dark ? "#dfe3e9" : "#303740",
-    cursor: dark ? "#a5b4fc" : "#5365b5",
-    cursorAccent: dark ? "#2c2c2c" : "#fafafa",
-    selectionBackground: dark ? "#343f60" : "#e0e7fa",
-    selectionForeground: dark ? "#ffffff" : "#202c50",
+    ...terminalClass?.getTheme(dark ? preset : "tango"),
+    background,
+    foreground: color("--text"),
+    cursor: color("--accent"),
+    cursorAccent: background,
+    selectionBackground: color("--terminal-selection"),
+    selectionForeground: color("--terminal-selection-text"),
   };
 }
 
@@ -265,10 +270,17 @@ function updateMetadata(next:View) {
   }
 }
 
+function setSessionLoading(busy: boolean) {
+  sessionLoading.hidden = !busy;
+  workspace.setAttribute("aria-busy", String(busy));
+}
+
 function selectSession(id: string) {
   if (id === sessionId) return;
   sessionId = id;
   view = undefined;
+  navigating = true;
+  status.textContent = "";
   render();
   const url = new URL(location.href);
   if (id) url.searchParams.set("session", id);
@@ -304,12 +316,13 @@ async function refresh() {
       updateMetadata(next);
     }
     navigating=false;
-    workspace.classList.remove('is-loading');workspace.setAttribute('aria-busy','false');
+    setSessionLoading(false);
     if(!id)renderIfChanged();
     status.textContent = id ? "" : "Create or select a session.";
     return true;
   } catch (error) {
     if(controller.signal.aborted||generation!==refreshGeneration)return;
+    setSessionLoading(false);
     status.textContent = String(error);
     return false;
   } finally {
@@ -384,7 +397,15 @@ function mountPane(block: Block, rect: Rect, keep: Set<string>) {
     terminal.className = "webterm-terminal";
     const viewport = document.createElement("div");
     viewport.className = "terminal-viewport";
-    viewport.append(terminal);
+    const loader = document.createElement("div");
+    loader.className = "terminal-loading";
+    loader.setAttribute("role", "status");
+    loader.textContent = "Loading terminal…";
+    const errorMessage = document.createElement("span");
+    errorMessage.className = "terminal-load-error";
+    errorMessage.setAttribute("role", "status");
+    errorMessage.textContent = "Could not connect to the terminal.";
+    viewport.append(terminal, loader, errorMessage);
     element.append(header, viewport);
     workspace.append(element);
     pane = { element };
@@ -400,18 +421,29 @@ function mountPane(block: Block, rect: Rect, keep: Set<string>) {
     if (selectedHost) url.searchParams.set("host", selectedHost);
     const mounted = pane;
     const ownerSession=sessionId;
+    const appearanceKey = () => {
+      const {theme, palette} = document.documentElement.dataset;
+      return theme === "dark" ? `dark:${palette}` : "light";
+    };
+    let initialAppearance: string;
     void import('./webterm/terminal').then(({WebTerminal})=>{
       if(panes.get(id)!==mounted)return;
       terminalClass=WebTerminal;
+      initialAppearance = appearanceKey();
       return WebTerminal.create(terminal, url.href, { autofocus: false, fontSize: 14, renderer: rendererChoice, bidi: bidiEnabled, theme: terminalTheme(), uploadFile:file=>uploadToPane(file,ownerSession,id) });
     }).then((instance) => {
       if(!instance)return;
       if (panes.get(id) === mounted) {
         mounted.terminal = instance;
+        // Appearance may have changed while the renderer or WASM was loading.
+        if (initialAppearance !== appearanceKey()) instance.setTheme(terminalTheme());
         if (activeWindow?.focused_block_id === id) { focusTerminal(); runSearch(); }
       }
       else instance.dispose();
-    }).catch((error) => { terminal.textContent = String(error); });
+    }).catch(() => {
+      errorMessage.textContent = "Could not initialize the terminal renderer.";
+      terminal.classList.add("-load-error");
+    });
   }
   pane.element.querySelector(".pane-label")!.textContent = block.label || "Shell";
   pane.element.classList.toggle("active", activeWindow?.focused_block_id === id);
@@ -598,15 +630,15 @@ function render() {
   workspace.classList.toggle('has-splits',keep.size>1);
   updateNavigation(view);
   workspace.querySelector(".empty-state")?.remove();
-  if (!keep.size) {
+  setSessionLoading(navigating);
+  if (!keep.size && !navigating) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
     const label = document.createElement("p");
-    label.textContent = navigating ? "Connecting to your workspace…" : view ? "Open a terminal to get started" : "Your sessions, ready when you are";
+    label.textContent = view ? "Open a terminal to get started" : "Your sessions, ready when you are";
     const button = document.createElement("button");
     button.className = "primary";
     button.textContent = view ? "New tab" : "New session";
-    button.hidden=navigating;
     button.addEventListener("click", () => runCommand(view ? "new-window" : "create"));
     empty.append(icon("terminal"), label, button);
     workspace.append(empty);
@@ -673,7 +705,15 @@ function renderChooser() {
     choices = sessionList.map((session) => ({
       label: session.label || "Shell", glyph: "terminal", current: session.session_id === sessionId,
       hint: session.session_id === sessionId ? "Current" : undefined,
-      run: () => { chooser.close(); selectSession(session.session_id); void refresh(); },
+      run: () => {
+        chooser.close();
+        if (session.session_id === sessionId) { focusTerminal(); return; }
+        refreshGeneration++;
+        refreshController?.abort();
+        requestedWindow = undefined;
+        selectSession(session.session_id);
+        void refresh();
+      },
     }));
   } else {
     choices = [
@@ -798,7 +838,10 @@ document.addEventListener("keydown", (event) => {
   }
 }, true);
 window.addEventListener("rexweb:theme", event => {
-  for (const pane of panes.values()) pane.terminal?.setTheme(terminalTheme());
+  if (terminalClass) {
+    const theme = terminalTheme();
+    for (const pane of panes.values()) pane.terminal?.setTheme(theme);
+  }
   if ((event as CustomEvent<{userInitiated: boolean}>).detail?.userInitiated) focusTerminal();
 });
 
@@ -817,7 +860,7 @@ window.addEventListener('rexweb:navigate',(event)=>{
   updates.stop();refreshController?.abort();refreshGeneration++;
   sessionId=new URLSearchParams(location.search).get('session')??'';
   view=undefined;activeWindow=undefined;presentation='';navigating=true;
-  workspace.classList.add('is-loading');workspace.setAttribute('aria-busy','true');
+  status.textContent = "";
   sessionLabel.textContent='Sessions';
   render();void loadCapabilities();resumeUpdates();
 });

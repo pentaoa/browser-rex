@@ -53,8 +53,10 @@ correct protocol acknowledgements while remaining file/network independent.
 ## Appearance
 
 Open the workspace **… → 外观** menu to select **跟随系统** (system),
-**亮色** (light) or **暗色** (dark). The browser remembers the selection and
-synchronizes it across same-origin tabs and embedded workspaces. The workspace
+**亮色** (light) or **暗色** (dark). When dark mode is active, **暗色配色**
+offers Obsidian (near black), Ocean (dark blue), and Graphite (medium gray).
+The browser remembers both settings and synchronizes them across same-origin
+tabs and embedded workspaces. The workspace
 and terminal canvas change together without reconnecting sessions. System mode
 follows live operating-system appearance changes.
 

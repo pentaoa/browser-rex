@@ -1,6 +1,11 @@
 import {hosts,selectedHost,selectHost,preferredSession,hostDescription,type Host} from './hosts';
 
-export interface NavigationWindow {window_id:string;label:string;focused_block_id?:string}
+export interface NavigationWindow {
+  window_id: string;
+  label: string;
+  focused_block_id?: string;
+  layers?: {blocks: {block_id: string; label: string}[] | null}[] | null;
+}
 export interface NavigationView {
   session_id:string;label:string;active_window_id?:string;windows:NavigationWindow[]|null;
   terminal_metadata?:Record<string,{title:string}>;
@@ -26,8 +31,18 @@ function icon(name:string){
   svg.classList.add('icon');svg.setAttribute('aria-hidden','true');
   const use=document.createElementNS(svg.namespaceURI,'use');use.setAttribute('href',`#icon-${name}`);svg.append(use);return svg;
 }
-export function windowTitle(view:NavigationView,window:NavigationWindow){
-  return (window.label&&window.label!=='Terminal'?window.label:view.terminal_metadata?.[window.focused_block_id??'']?.title)||window.label||'Terminal';
+export function windowTitle(view: NavigationView, window: NavigationWindow) {
+  const label = window.label?.trim();
+  if (label && !/^(?:terminal|window(?:\s+#?(?:\d+|[0-9a-f]{8}(?:-[0-9a-f-]+)?))?)$/i.test(label)) return label;
+  const blockID = window.focused_block_id ?? "";
+  const title = view.terminal_metadata?.[blockID]?.title?.trim();
+  if (title) return title;
+  for (const layer of window.layers ?? []) {
+    const block = layer.blocks?.find(candidate => candidate.block_id === blockID);
+    const name = block?.label?.trim();
+    if (name && !/^(?:shell|terminal)$/i.test(name)) return name;
+  }
+  return view.label?.trim() || label || "Terminal";
 }
 function groupHosts():Host[]{return [{id:'',label:'Local',endpoint:''},...hosts];}
 function mountCurrentTabs(group:{items:HTMLElement}){

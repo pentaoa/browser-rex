@@ -1221,8 +1221,8 @@ class WebTerminal {
             return;
           this.ready = true;
           this.reconnectAttempts = 0;
-          this.element.classList.add("-connected");
-          this.element.classList.remove("-disconnected", "-paused");
+          this.element.classList.add("-connected", "-has-rendered");
+          this.element.classList.remove("-disconnected", "-paused", "-load-error");
           this.resumeButton?.remove(); this.resumeButton = undefined;
           if (!document.hidden) this.startHeartbeatWatchdog();
           const { cols, rows } = this.terminal;
@@ -1235,11 +1235,17 @@ class WebTerminal {
       case "pong":
         this.lastPongAt = Date.now();
         break;
-      case "exit":
+      case "exit": {
         this.ready = false;
         this.exited = true;
-        this.element.classList.add("-exited");
+        const epoch = this.streamEpoch;
+        this.terminal.write("", () => {
+          if (!this.disposed && epoch === this.streamEpoch && generation === this.socketGeneration) {
+            this.element.classList.add("-exited", "-has-rendered");
+          }
+        });
         break;
+      }
     }
   }
 
@@ -1478,6 +1484,7 @@ class WebTerminal {
   /** Schedule reconnection attempt */
   private scheduleReconnect(): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      if (!this.element.classList.contains("-has-rendered")) this.element.classList.add("-load-error");
       console.error("Max reconnection attempts reached");
       return;
     }
