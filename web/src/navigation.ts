@@ -31,18 +31,17 @@ function icon(name:string){
   svg.classList.add('icon');svg.setAttribute('aria-hidden','true');
   const use=document.createElementNS(svg.namespaceURI,'use');use.setAttribute('href',`#icon-${name}`);svg.append(use);return svg;
 }
-export function windowTitle(view: NavigationView, window: NavigationWindow) {
+export function windowTitle(window: NavigationWindow) {
   const label = window.label?.trim();
   if (label && !/^(?:terminal|window(?:\s+#?(?:\d+|[0-9a-f]{8}(?:-[0-9a-f-]+)?))?)$/i.test(label)) return label;
-  const blockID = window.focused_block_id ?? "";
-  const title = view.terminal_metadata?.[blockID]?.title?.trim();
-  if (title) return title;
   for (const layer of window.layers ?? []) {
-    const block = layer.blocks?.find(candidate => candidate.block_id === blockID);
+    const block = window.focused_block_id
+      ? layer.blocks?.find(candidate => candidate.block_id === window.focused_block_id)
+      : layer.blocks?.[0];
     const name = block?.label?.trim();
-    if (name && !/^(?:shell|terminal)$/i.test(name)) return name;
+    if (name) return name;
   }
-  return view.label?.trim() || label || "Terminal";
+  return "Terminal";
 }
 function groupHosts():Host[]{return [{id:'',label:'Local',endpoint:''},...hosts];}
 function mountCurrentTabs(group:{items:HTMLElement}){
@@ -55,13 +54,13 @@ function backgroundTabs(host:Host){
   if(host.id===selectedHost){mountCurrentTabs(group);group.caption.textContent=current?.label??'Sessions';return;}
   const view=views.get(host.id);
   group.caption.textContent=view?.label??'Select a workspace';
-  const summary=JSON.stringify([view?.session_id,view?.label,view?.windows?.map(w=>[w.window_id,windowTitle(view!,w)])]);
+  const summary=JSON.stringify([view?.session_id,view?.label,view?.windows?.map(w=>[w.window_id,windowTitle(w)])]);
   if(group.summary===summary&&!group.items.contains(tabs)&&group.items.children.length===(view?.windows?.length??0))return;
   group.summary=summary;group.items.replaceChildren();
   for(const entry of view?.windows??[]){
     const row=document.createElement('div');row.className='window-tab';row.dataset.active='false';
     const button=document.createElement('button');button.className='tab-select';
-    const name=document.createElement('span');name.className='tab-label';name.textContent=windowTitle(view!,entry);
+    const name=document.createElement('span');name.className='tab-label';name.textContent=windowTitle(entry);
     button.append(icon('terminal'),name);button.title=name.textContent;
     button.addEventListener('click',()=>selectHost(host.id,{session:view!.session_id,window:entry.window_id}));
     const close=document.createElement('button');close.className='tab-close';close.append(icon('close'));
@@ -134,7 +133,8 @@ export function updateNavigation(view?:NavigationView){
     loaded.set(selectedHost,{at:performance.now(),endpoint:hosts.find(h=>h.id===selectedHost)?.endpoint??'',session:view.session_id});
   }
   const active=view?.windows?.find(w=>w.window_id===view.active_window_id);
-  document.querySelector('#content-title')!.textContent=active?windowTitle(view!,active):'Terminal';
+  const appTitle = view?.terminal_metadata?.[active?.focused_block_id ?? ""]?.title?.trim();
+  document.querySelector('#content-title')!.textContent = appTitle || (active ? windowTitle(active) : "Terminal");
   if(vertical){
     const group=groups.get(selectedHost);
     if(group){mountCurrentTabs(group);group.caption.textContent=view?.label??'Sessions';}

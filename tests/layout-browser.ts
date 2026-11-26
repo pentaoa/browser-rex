@@ -60,8 +60,13 @@ try{
  assert.equal(await page.locator('#connection-status').count(),0,'connection dot still rendered');
  await page.locator('.host-group').nth(3).waitFor();await page.waitForFunction(()=>[...document.querySelectorAll('.host-group-caption')].every(el=>el.textContent==='Research workspace'));
  await page.waitForFunction(()=>document.querySelectorAll('.host-group-tabs .window-tab').length===8);
- assert.deepEqual(await page.locator('#windows .tab-label').allTextContents(),['Research workspace','Research workspace']);
+ assert.deepEqual(await page.locator('#windows .tab-label').allTextContents(),['shell','shell']);
  assert.deepEqual(await page.locator(`.host-group[data-host="${ids.gamma}"] .tab-label`).allTextContents(),['Build runner','Release notes']);
+ await page.keyboard.insertText("printf '\\033]0;Example application\\007'");
+ await page.keyboard.press('Enter');
+ await page.waitForFunction(()=>document.querySelector('#content-title')?.textContent==='Example application');
+ assert.deepEqual(await page.locator('#windows .tab-label').allTextContents(),['shell','shell']);
+ assert.equal(await page.locator('.host-group[data-host=""] .host-group-caption').textContent(),'Research workspace');
  assert.equal(await page.locator('#navigation').evaluate(el=>Math.round(el.getBoundingClientRect().width)),210);
  assert.equal(await page.locator('#terminal-surface').evaluate(el=>getComputedStyle(el).borderTopLeftRadius),'12px');
  assert.equal(await page.locator('.window-tab[data-active="true"]').evaluate(el=>getComputedStyle(el).borderTopLeftRadius),'999px');
@@ -149,7 +154,7 @@ try{
  await page.setViewportSize({width:1100,height:800});await page.emulateMedia({colorScheme:'light'});
  if(shots)await page.screenshot({animations:'disabled',path:join(shots,'layout-horizontal-light.png')});
  assert.deepEqual(errors,[]);
- console.log(JSON.stringify({result:'passed',checks:['reference sidebar/topbar geometry','rounded content/pill tabs','layout preserves terminal and socket','native per-host sidebar groups','no duplicate cached/live rows after repeated host changes','same-name windows remain selectable','native focused-block titles and session fallback','single labeled footer control','cross-host tab selection','search/keyboard/custom host picker','history','safe long labels','input after resize','persistent layout','320/390px popover bounds','light/dark'],browserErrors:errors.length}));
+ console.log(JSON.stringify({result:'passed',checks:['reference sidebar/topbar geometry','rounded content/pill tabs','layout preserves terminal and socket','native per-host sidebar groups','no duplicate cached/live rows after repeated host changes','same-name windows remain selectable','assigned terminal names stay distinct from application titles and session names','single labeled footer control','cross-host tab selection','search/keyboard/custom host picker','history','safe long labels','input after resize','persistent layout','320/390px popover bounds','light/dark'],browserErrors:errors.length}));
 }catch(error){
  const dir=process.env.REXWEB_SCREENSHOTS;if(dir&&currentPage){await mkdir(dir,{recursive:true});await currentPage.screenshot({path:join(dir,'layout-failure.png')});console.error('LAYOUT',await currentPage.evaluate(()=>({status:document.querySelector('#status')?.textContent,groups:[...document.querySelectorAll('.host-group-caption')].map(e=>e.textContent)})));}throw error;
 }finally{

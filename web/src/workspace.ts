@@ -254,7 +254,7 @@ function updateMetadata(next:View) {
   for (const entry of next.windows ?? []) {
     const label = tabs.get(entry.window_id)?.querySelector('.tab-label');
     if (label) {
-      const title=windowTitle(next,entry);label.textContent=title;
+      const title=windowTitle(entry);label.textContent=title;
       const tab=tabs.get(entry.window_id)!;
       tab.querySelector<HTMLButtonElement>('.tab-select')!.title=title;
       tab.querySelector('.tab-close')!.setAttribute('aria-label',`Close tab: ${title}`);
@@ -264,7 +264,7 @@ function updateMetadata(next:View) {
   for(const [id,metadata] of Object.entries(next.terminal_metadata??{})){
     const pane=panes.get(id);if(!pane)continue;
     const label=pane.element.querySelector<HTMLElement>('.pane-label');
-    if(label){label.textContent=metadata.title||'Shell';label.title=metadata.pwd||'';}
+    if(label){label.textContent=metadata.title?.trim()||label.dataset.blockLabel||'Terminal';label.title=metadata.pwd||'';}
     const badge=pane.element.querySelector<HTMLElement>('.pane-status');
     if(badge){badge.hidden=!metadata.state||metadata.state==='idle';badge.dataset.state=metadata.state;badge.textContent=metadata.state+(metadata.progress!==undefined?` ${metadata.progress}%`:'');badge.title=metadata.message||metadata.status_title||metadata.app||metadata.state;}
   }
@@ -445,7 +445,9 @@ function mountPane(block: Block, rect: Rect, keep: Set<string>) {
       terminal.classList.add("-load-error");
     });
   }
-  pane.element.querySelector(".pane-label")!.textContent = block.label || "Shell";
+  const label = pane.element.querySelector<HTMLElement>(".pane-label")!;
+  label.dataset.blockLabel = block.label?.trim() || "Terminal";
+  label.textContent = label.dataset.blockLabel;
   pane.element.classList.toggle("active", activeWindow?.focused_block_id === id);
   place(pane.element, rect);
 }
@@ -600,7 +602,7 @@ function render() {
       tab.append(select,close);
       tabs.set(entry.window_id,tab);
     }
-    const label=windowTitle(view!,entry);
+    const label=windowTitle(entry);
     const name=tab.querySelector('.tab-label')!;
     if(name.textContent!==label)name.textContent=label;
     const select=tab.querySelector('button')!;

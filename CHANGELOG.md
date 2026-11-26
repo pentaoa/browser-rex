@@ -4,7 +4,7 @@
 
 - Add three dark palettes, with a high-contrast near-black default.
 - Show a loading spinner until the terminal has consumed its initial history.
-- Use native terminal and session titles in place of generated window names.
+- Use the assigned terminal name in place of generated window labels. Keep application titles in terminal headings and session names in the sidebar groups.
 
 ## 0.3.0
 
