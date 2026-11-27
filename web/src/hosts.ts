@@ -7,6 +7,7 @@ if(initialSession)lastSessions.set(selectedHost,initialSession);
 export interface Host { id: string; label: string; endpoint: string }
 const dialog = document.querySelector<HTMLDialogElement>("#hosts-dialog")!;
 const picker = document.querySelector<HTMLButtonElement>("#host-picker")!;
+const create = document.querySelector<HTMLButtonElement>("#current-host-create")!;
 const popover = document.querySelector<HTMLElement>("#host-popover")!;
 const hostFilter = document.querySelector<HTMLInputElement>("#host-filter")!;
 const options = document.querySelector<HTMLElement>("#host-options")!;
@@ -32,6 +33,8 @@ function updatePicker() {
   document.querySelector("#host-detail")!.textContent = host ? hostDescription(host) : selectedHost;
   picker.querySelector(".host-symbol use")!.setAttribute("href", selectedHost ? "#icon-globe" : "#icon-device");
   picker.title = host ? `${host.label} · ${hostDescription(host)}` : "Choose host";
+  create.title = `New session on ${selectedHost ? host?.label ?? selectedHost : "This server"}`;
+  create.setAttribute("aria-label", create.title);
 }
 function highlight(index: number) {
   highlighted = Math.max(0, Math.min(filtered.length - 1, index));

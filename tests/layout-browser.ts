@@ -153,6 +153,22 @@ try{
  }
  await page.setViewportSize({width:1100,height:800});await page.emulateMedia({colorScheme:'light'});
  if(shots)await page.screenshot({animations:'disabled',path:join(shots,'layout-horizontal-light.png')});
+ await page.getByRole('button',{name:'Use vertical tabs'}).click();
+ const startHost=new URL(page.url()).searchParams.get('host');
+ assert.notEqual(startHost,ids.beta);
+ await page.locator(`.host-group[data-host="${ids.beta}"]`).getByRole('button',{name:'New session on Build server'}).click();
+ const dialog=page.locator('#action-dialog');
+ assert.equal(await dialog.locator('#action-description').textContent(),'Host: Build server');
+ assert.equal(new URL(page.url()).searchParams.get('host'),startHost,'opening the dialog changed hosts');
+ await dialog.locator('#action-name').fill('Build workspace');
+ const creates=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/action'&&response.request().postDataJSON().op==='create');
+ await dialog.getByRole('button',{name:'Create session',exact:true}).click();
+ const response=await creates;assert(response.ok());
+ assert.equal(new URL(response.url()).searchParams.get('host'),ids.beta,'creation went to the wrong host');
+ const createdSession=(await response.json()).session_id;
+ await page.waitForURL(url=>url.searchParams.get('host')===ids.beta&&url.searchParams.get('session')===createdSession);
+ await page.locator('.webterm-terminal.-connected').waitFor();
+ assert.equal(await page.locator(`.host-group[data-host="${ids.beta}"] .host-group-caption`).textContent(),'Build workspace');
  assert.deepEqual(errors,[]);
  console.log(JSON.stringify({result:'passed',checks:['reference sidebar/topbar geometry','rounded content/pill tabs','layout preserves terminal and socket','native per-host sidebar groups','no duplicate cached/live rows after repeated host changes','same-name windows remain selectable','assigned terminal names stay distinct from application titles and session names','single labeled footer control','cross-host tab selection','search/keyboard/custom host picker','history','safe long labels','input after resize','persistent layout','320/390px popover bounds','light/dark'],browserErrors:errors.length}));
 }catch(error){

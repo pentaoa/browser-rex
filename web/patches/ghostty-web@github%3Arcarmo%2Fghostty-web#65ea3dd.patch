@@ -1,0 +1,35 @@
+diff --git a/dist/ghostty-web.js b/dist/ghostty-web.js
+index 610e1ee73672d49b3f786f88b06be709ccd3069f..e148836b954d8228ed139bcf622f9bf8b0c494d6 100644
+--- a/dist/ghostty-web.js
++++ b/dist/ghostty-web.js
+@@ -4522,9 +4522,9 @@ var ct = class {
+ 		let r = this.devicePixelRatio;
+ 		if (this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height), !e) return;
+ 		let i = this.metrics;
+-		t * i.width * r, n * i.height * r, this.overlayCtx.save(), this.overlayCtx.font = `${this.fontSize}px ${this.fontFamily}`, this.overlayCtx.textBaseline = "top", this.overlayCtx.fillStyle = this.theme.foreground, this.overlayCtx.scale(r, r);
++		t * i.width * r, n * i.height * r, this.overlayCtx.save(), this.overlayCtx.font = `${this.fontSize}px ${this.fontFamily}`, this.overlayCtx.textBaseline = "alphabetic", this.overlayCtx.fillStyle = this.theme.foreground, this.overlayCtx.scale(r, r);
+ 		let a = t * i.width, o = n * i.height;
+-		this.overlayCtx.fillText(e, a, o);
++		this.overlayCtx.fillText(e, a, o + i.baseline);
+ 		let s = o + i.height - 2, c = this.overlayCtx.measureText(e).width;
+ 		this.overlayCtx.fillRect(a, s, c, 1), this.overlayCtx.restore();
+ 	}
+diff --git a/lib/renderer.ts b/lib/renderer.ts
+index 296de799f373e0da74057403c36b09963200b364..5ebf86ec4ae639920e25684a30ffe374f323d600 100644
+--- a/lib/renderer.ts
++++ b/lib/renderer.ts
+@@ -2517,12 +2517,12 @@ export class CanvasRenderer {
+     this.overlayCtx.save();
+     // Mirror the font string from the main context
+     this.overlayCtx.font = `${this.fontSize}px ${this.fontFamily}`;
+-    this.overlayCtx.textBaseline = 'top';
++    this.overlayCtx.textBaseline = 'alphabetic';
+     this.overlayCtx.fillStyle = this.theme.foreground;
+     this.overlayCtx.scale(dpr, dpr);
+     const scaledPx = cellX * m.width;
+     const scaledPy = cellY * m.height;
+-    this.overlayCtx.fillText(text, scaledPx, scaledPy);
++    this.overlayCtx.fillText(text, scaledPx, scaledPy + m.baseline);
+ 
+     // Underline for preedit visibility
+     const underlineY = scaledPy + m.height - 2;

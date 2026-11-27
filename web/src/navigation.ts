@@ -16,6 +16,7 @@ const tabs=document.querySelector<HTMLElement>('#windows')!;
 const connection=document.querySelector<HTMLElement>('.connection-picker')!;
 const toggle=document.querySelector<HTMLButtonElement>('#layout-toggle')!;
 const footer=document.querySelector<HTMLElement>('#sidebar-footer')!;
+const currentHostCreate=document.querySelector<HTMLButtonElement>('#current-host-create')!;
 const groups=new Map<string,{element:HTMLElement;caption:HTMLElement;items:HTMLElement;summary?:string}>();
 const views=new Map<string,NavigationView>();
 const loaded=new Map<string,{at:number;endpoint:string;session?:string}>();
@@ -44,6 +45,10 @@ export function windowTitle(window: NavigationWindow) {
   return "Terminal";
 }
 function groupHosts():Host[]{return [{id:'',label:'Local',endpoint:''},...hosts];}
+function requestSessionCreation(host:string){
+  window.dispatchEvent(new CustomEvent('rexweb:create-session',{detail:host}));
+}
+currentHostCreate.addEventListener('click',()=>requestSessionCreation(selectedHost));
 function mountCurrentTabs(group:{items:HTMLElement}){
   // A selected host replaces its cached summary with the one live tab strip.
   // Leave it attached on ordinary refreshes to preserve focus and node identity.
@@ -90,8 +95,18 @@ function renderGroups(){
       button.append(icon(host.id?'globe':'device'),name);button.title=host.label;
       button.addEventListener('click',()=>selectHost(host.id));
       const caption=document.createElement('div');caption.className='host-group-caption';
+      const sessionBar=document.createElement('div');sessionBar.className='host-session-bar';
+      const create=document.createElement('button');
+      create.type='button';create.className='host-session-create';
+      const target=host.id?host.label:'This server';
+      create.title=`New session on ${target}`;
+      create.setAttribute('aria-label',create.title);
+      create.setAttribute('aria-haspopup','dialog');
+      create.append(icon('plus'),'New session');
+      create.addEventListener('click',()=>requestSessionCreation(host.id));
+      sessionBar.append(caption,create);
       const items=document.createElement('div');items.className='host-group-tabs';
-      element.append(button,caption,items);rail.append(element);groups.set(host.id,{element,caption,items});
+      element.append(button,sessionBar,items);rail.append(element);groups.set(host.id,{element,caption,items});
     }
   }
   for(const host of all)backgroundTabs(host);

@@ -1,7 +1,7 @@
 import type { WebTerminal } from "./webterm/terminal";
 import { bindWorkspaceViewport } from "./viewport";
 import { previewSplit, type Layout, type Rect } from "./layout";
-import { selectedHost, hostDialogOpen, hostPickerOpen, openHosts } from "./hosts";
+import { hosts, selectedHost, selectHost, hostDialogOpen, hostPickerOpen, openHosts } from "./hosts";
 import { updateNavigation, windowTitle } from "./navigation";
 import { WorkspaceUpdates } from "./updates";
 import { bindDialog, dismissDialog } from "./dialog";
@@ -9,9 +9,9 @@ import { bindDialog, dismissDialog } from "./dialog";
 bindWorkspaceViewport();
 let terminalClass: typeof WebTerminal | undefined;
 
-const endpoint = (path: string) => {
+const endpoint = (path: string, host = selectedHost) => {
   const url = new URL(path.replace(/^\//, ""), document.baseURI);
-  if (selectedHost) url.searchParams.set("host", selectedHost);
+  if (host) url.searchParams.set("host", host);
   return url.href;
 };
 
@@ -238,8 +238,8 @@ function focusTerminal() {
   }
 }
 
-async function api<T>(path: string, body?: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(endpoint(path), {
+async function api<T>(path: string, body?: Record<string, unknown>, signal?: AbortSignal, host = selectedHost): Promise<T> {
+  const response = await fetch(endpoint(path, host), {
     signal,
     ...(body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:{}),
   });
@@ -336,14 +336,17 @@ async function refresh() {
   }
 }
 
-async function act(op: string, args: Record<string, unknown> = {}) {
-  if (acting||navigating) return;
+async function act(op: string, args: Record<string, unknown> = {}, host = selectedHost) {
+  if (acting || (navigating && op !== "create")) return;
   acting = true;
   const generation=refreshGeneration;
   refreshController?.abort();
   try {
-    const result = await api<{ session_id?: string }>("/api/action", { op, session: sessionId, ...args });
-    if(generation===refreshGeneration&&op === "create" && result.session_id) selectSession(result.session_id);
+    const result = await api<{ session_id?: string }>("/api/action", { op, session: sessionId, ...args }, undefined, host);
+    if (generation === refreshGeneration && op === "create" && result.session_id) {
+      if (host === selectedHost) selectSession(result.session_id);
+      else selectHost(host, { session: result.session_id });
+    }
   } catch (error) {
     if(generation===refreshGeneration)status.textContent = String(error);
     return;
@@ -637,12 +640,15 @@ function render() {
     const empty = document.createElement("div");
     empty.className = "empty-state";
     const label = document.createElement("p");
-    label.textContent = view ? "Open a terminal to get started" : "Your sessions, ready when you are";
-    const button = document.createElement("button");
-    button.className = "primary";
-    button.textContent = view ? "New tab" : "New session";
-    button.addEventListener("click", () => runCommand(view ? "new-window" : "create"));
-    empty.append(icon("terminal"), label, button);
+    label.textContent = view ? "Open a terminal to get started" : "No sessions on this host";
+    empty.append(icon("terminal"), label);
+    if (view) {
+      const button = document.createElement("button");
+      button.className = "primary";
+      button.textContent = "New tab";
+      button.addEventListener("click", () => runCommand("new-window"));
+      empty.append(button);
+    }
     workspace.append(empty);
   }
   if (focusedSplit) {
@@ -660,7 +666,7 @@ function renderIfChanged(){
   if(key===presentation)return;presentation=key;render();
 }
 
-function runCommand(op: string, block = activeWindow?.focused_block_id, initialName = "") {
+function runCommand(op: string, block = activeWindow?.focused_block_id, initialName = "", host = selectedHost) {
   chooser.close();
   if(op==='upload-file'){uploadInput.click();return;}
   if(op==='previous-prompt'||op==='next-prompt'){
@@ -669,12 +675,14 @@ function runCommand(op: string, block = activeWindow?.focused_block_id, initialN
   }
   if(op==='export-text'||op==='export-html'||op==='export-vt'){void exportFocused(op.slice(7) as 'text'|'html'|'vt');return;}
   if (op === "create" || op === "rename" || op === "destroy" || op === "close-block") {
+    actionDialog.dataset.action = op;
     const naming = op === "create" || op === "rename";
+    const hostLabel = host ? hosts.find(entry => entry.id === host)?.label ?? host : "This server";
     const label = op === "create" ? "New session" : op === "rename" ? "Rename session" :
       op === "destroy" ? "End session?" : "Close pane?";
     document.querySelector("#action-title")!.textContent = label;
     document.querySelector("#action-description")!.textContent = naming ?
-      (op === "create" ? "Start a new terminal workspace." : "Choose a name for this workspace.") :
+      (op === "create" ? `Host: ${hostLabel}` : "Choose a name for this workspace.") :
       (op === "destroy" ? `This will end “${view?.label || "this session"}” and its running programs.` :
         "This will close this terminal and its running program.");
     document.querySelector<HTMLElement>("#action-label")!.hidden = !naming;
@@ -685,8 +693,8 @@ function runCommand(op: string, block = activeWindow?.focused_block_id, initialN
     submit.textContent = op === "create" ? "Create session" : op === "rename" ? "Save name" :
       op === "destroy" ? "End session" : "Close pane";
     submit.classList.toggle("danger", !naming);
-    const targetSession = sessionId;
-    pendingAction = () => void act(op, { session: targetSession, block, ...(naming ? { label: actionName.value.trim() } : {}) });
+    const targetSession = op === "create" ? "" : sessionId;
+    pendingAction = () => void act(op, { session: targetSession, block: op === "create" ? undefined : block, ...(naming ? { label: actionName.value.trim() } : {}) }, host);
     actionDialog.showModal();
     if (naming) { actionName.focus(); actionName.select(); }
     else actionDialog.querySelector<HTMLButtonElement>("[data-dismiss]")!.focus();
@@ -867,6 +875,7 @@ window.addEventListener('rexweb:navigate',(event)=>{
   render();void loadCapabilities();resumeUpdates();
 });
 window.addEventListener('rexweb:focus-window',event=>void act('focus-window',{window:(event as CustomEvent<string>).detail}));
+window.addEventListener('rexweb:create-session',event=>runCommand("create", undefined, "", (event as CustomEvent<string>).detail));
 window.addEventListener('rexweb:picker-dismiss',focusTerminal);
 window.addEventListener('rexweb:layout',()=>{workspaceMenu.open=false;focusTerminal();});
 function syncVisibility(){

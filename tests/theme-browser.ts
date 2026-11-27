@@ -63,9 +63,28 @@ try{
   assert.equal(await page.evaluate(()=>document.documentElement.dataset.palette),'graphite');
  }finally{release();}
  await page.waitForLoadState();await page.unroute('**/static/js/workspace-*.js');await page.locator('.webterm-terminal.-connected').waitFor();await expectTheme(page,'dark','dark','graphite');
- const response=await fetch(origin+'/api/action',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({op:'create',label:'theme-sync'})});
- assert(response.ok);const {session_id}=await response.json();
- const second=await context.newPage();await second.goto(origin+'/?'+new URLSearchParams({session:session_id}));await second.locator('.webterm-terminal.-connected').waitFor();
+ await page.getByRole('button',{name:'New session on This server',exact:true}).click();
+ const dialog=page.locator('#action-dialog');
+ await dialog.waitFor();
+ const backdrop=await dialog.evaluate(el=>{
+  const style=getComputedStyle(el,'::backdrop');
+  return [style.backgroundColor,style.backdropFilter];
+ });
+ assert.deepEqual(backdrop,['rgba(0, 0, 0, 0)','none'],'creating a session tinted the workspace');
+ await expectTheme(page,'dark','dark','graphite');
+ await dialog.locator('#action-name').fill('theme-sync');
+ const creating=page.waitForResponse(response=>response.url()===origin+'/api/action'&&response.request().postDataJSON().op==='create');
+ await dialog.getByRole('button',{name:'Create session',exact:true}).click();
+ const response=await creating;
+ assert(response.ok());const {session_id}=await response.json();
+ await page.waitForURL(url=>url.searchParams.get('session')===session_id);
+ await page.locator('.webterm-terminal.-connected').waitFor();
+ await expectTheme(page,'dark','dark','graphite');
+ // Use a different session for the cross-document test, since one pane has one viewer.
+ const initialSession=await (await fetch(origin+'/api/sessions')).json();
+ const previous=initialSession.sessions.find((item:{session_id:string})=>item.session_id!==session_id);
+ assert(previous);
+ const second=await context.newPage();await second.goto(origin+'/?'+new URLSearchParams({session:previous.session_id}));await second.locator('.webterm-terminal.-connected').waitFor();
  await expectTheme(second,'dark','dark','graphite');
  await second.locator('#workspace-menu summary').click();await second.locator('#manage-hosts').click();
  await second.locator('#host-name').fill('preserve editing focus');

@@ -14,5 +14,8 @@
   "type": "module",
   "dependencies": {
     "ghostty-web": "github:rcarmo/ghostty-web#65ea3ddbbd421c5a863c4de72866faf2ae73ad58"
+  },
+  "patchedDependencies": {
+    "ghostty-web@github:rcarmo/ghostty-web#65ea3dd": "patches/ghostty-web@github%3Arcarmo%2Fghostty-web#65ea3dd.patch"
   }
 }

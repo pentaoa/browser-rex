@@ -58,10 +58,22 @@ try{
     const prefix="printf '\\137\\137IME_OK\\137\\137:%s\\n' '";
     await page.keyboard.insertText(prefix);
     await until(async()=>stdin.join('')===prefix,'beforeinput-only insertion lost');
+    await frame.evaluate(()=>{
+      const prototype=CanvasRenderingContext2D.prototype;
+      const original=prototype.fillText;
+      prototype.fillText=function(text,x,y,maxWidth){
+        if(text==='zhong'){
+          this.canvas.dataset.preeditBaseline=this.textBaseline;
+          prototype.fillText=original;
+        }
+        original.call(this,text,x,y,maxWidth);
+      };
+    });
     await cdp.send('Input.imeSetComposition',{text:'zhong',selectionStart:5,selectionEnd:5});
     const input=frame.locator('.webterm-terminal textarea');
     const overlay=await frame.locator('.webterm-terminal').evaluate(el=>{const canvases=[...el.querySelectorAll('canvas')];const main=canvases[0].getBoundingClientRect(),preedit=canvases[1].getBoundingClientRect();return {dx:preedit.left-main.left,dy:preedit.top-main.top};});
     assert(Math.abs(overlay.dx)<1&&Math.abs(overlay.dy)<1,'preedit overlay detached from terminal canvas');
+    assert.equal(await frame.locator('.webterm-terminal canvas').nth(1).getAttribute('data-preedit-baseline'),'alphabetic','preedit text baseline differed from terminal glyphs');
     assert.equal(await input.inputValue(),'zhong','preedit was cleared');
     await input.dispatchEvent('keydown',{key:'Enter',code:'Enter',keyCode:229,isComposing:true});
     await cdp.send('Input.imeSetComposition',{text:'中文输入',selectionStart:4,selectionEnd:4});

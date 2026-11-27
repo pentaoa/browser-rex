@@ -24,6 +24,8 @@ The project's MIT licence applies to its own code. The starting code is derived 
 
 The webterm component is adapted for pane lifecycle and textarea focus, consumed-byte replay offsets, cursor-anchored desktop and mobile input, clipboard/IME handling with composition preedit and focused-pane search. Its fallback WASM URL resolves against the document base for URL-prefix embedding. The CSS is adapted for the workspace. Its original MIT notice is retained. The ghostty-web fork includes MIT-licensed adaptations from [rundel/ghostterm](https://github.com/rundel/ghostterm) for ABI layouts, search integration and cooperative parsing.
 
+Browser Rex patches ghostty-web's Canvas and WebGPU preedit overlay to use the terminal glyph baseline.
+
 ## Font glyph notices
 
 The patched font retains its SIL Open Font License. Its glyph sources also carry the following upstream notices from [Nerd Fonts v3.4.0](https://github.com/ryanoasis/nerd-fonts/tree/v3.4.0/src/glyphs):

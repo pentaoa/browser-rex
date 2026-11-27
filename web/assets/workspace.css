@@ -140,6 +140,8 @@ button:disabled:hover { background: transparent; }
 .tab-bar { display: flex; align-items: center; height: 46px; gap: 8px; min-width: 0; padding: 0 10px; user-select: none; }
 #layout-toggle { flex-shrink: 0; }
 .tab-bar > .connection-picker { order: 0; }
+#current-host-create { order: 0; flex: 0 0 auto; }
+body[data-layout="vertical"] #current-host-create { display: none; }
 #horizontal-tabs { order: 1; }
 #layout-toggle { order: 2; }
 .toolbar-actions { order: 3; }
@@ -250,6 +252,7 @@ body.resizing-rows, body.resizing-rows * { cursor: row-resize !important; }
 .empty-state p { margin: 0; }
 dialog { padding: 0; width: min(460px, calc(100vw - 32px)); max-height: calc(100dvh - 64px); border: 1px solid var(--line); border-radius: 14px; background: var(--raised); color: var(--text); box-shadow: 0 16px 70px #0003; }
 dialog::backdrop { background: #15151c30; backdrop-filter: blur(3px); }
+#action-dialog[data-action="create"]::backdrop { background: transparent; backdrop-filter: none; }
 dialog[open] { animation: surface-enter var(--motion-enter) var(--motion-ease); }
 dialog[open]::backdrop { animation: backdrop-enter var(--motion-fast) ease-out; }
 dialog.is-closing::backdrop { opacity: 0; transition: opacity var(--motion-fast) ease-in; }
@@ -289,7 +292,10 @@ body[data-layout="vertical"] .toolbar-actions { flex-direction: row-reverse; gap
 .host-group-heading { justify-content: flex-start; gap: 9px; width: 100%; padding: 6px 9px; color: var(--text); font-weight: 600; font-size: 12px; }
 .host-group-heading > .icon { color: var(--muted); width: 16px; height: 16px; }
 .host-group-heading > span { overflow: hidden; text-overflow: ellipsis; }
-.host-group-caption { padding: 5px 9px 9px; color: var(--muted); font-size: 11px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.host-session-bar { display: flex; align-items: center; gap: 4px; padding: 0 4px 4px 9px; }
+.host-group-caption { flex: 1; min-width: 0; color: var(--muted); font-size: 11px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.host-session-create { flex: none; min-height: 24px; gap: 4px; padding: 3px 5px; color: var(--muted); font-size: 11px; }
+.host-session-create .icon { width: 12px; height: 12px; }
 .host-group-tabs, body[data-layout="vertical"] #windows { display: flex; flex-direction: column; gap: 3px; padding: 0; overflow: visible; }
 body[data-layout="vertical"] .window-tab { flex: none; width: 100%; max-width: none; min-width: 0; height: 28px; }
 body[data-layout="vertical"] .tab-select { font-size: 12px; }
@@ -337,7 +343,8 @@ body[data-layout="vertical"] .workspace-menu-items { right: auto; left: 8px; }
   #sidebar-hosts { padding-left: 4px; padding-right: 4px; }
   body[data-layout="vertical"] .tab-select { font-size: 11px; gap: 5px; }
   .host-group-heading { padding: 6px; gap: 6px; font-size: 11px; }
-  .host-group-caption { padding-left: 6px; font-size: 10px; }
+  .host-session-bar { padding-left: 6px; }
+  .host-group-caption, .host-session-create { font-size: 10px; }
 }
 
 #search-bar {
