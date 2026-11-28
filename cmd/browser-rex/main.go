@@ -314,6 +314,9 @@ func runService(ctx context.Context, o options) error {
 			return err
 		}
 		defer manager.Close()
+		if o.uploads {
+			manager.EnableUploads()
+		}
 	}
 	if o.uploads {
 		if err := store.EnableUploads(); err != nil {

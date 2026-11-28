@@ -103,6 +103,11 @@ existing file. The selected workspace directory is pinned by a directory handle,
 so replacement symlinks cannot redirect writes. Uploaded files persist until you
 remove them from the workspace. Uploads have no automatic retry.
 
+For a registered native Rex host, the same controls upload to that host when
+it exposes the terminal `upload_begin` method. Rex inserts the path into the
+selected pane after receiving the file. The browser shows an error if that
+host does not support terminal uploads.
+
 ## Program status and prompts
 
 Panes show reported working, blocked, done or error states, optional progress,
@@ -217,7 +222,7 @@ if Chromium is installed outside Playwright's default browser directory. The tes
 uses an explicit host-mode temporary service; it does not replace sandbox smoke
 tests.
 
-Remote file uploads, floating layouts, native stream resume and remote graphics
+Floating layouts, native stream resume and remote graphics
 already present in a snapshot are not supported. Snapshot import is bounded to
 16 MiB and replay/export to 4 MiB; snapshots with an unfinished parser
 continuation fail closed. Live VT output uses the existing browser renderer.

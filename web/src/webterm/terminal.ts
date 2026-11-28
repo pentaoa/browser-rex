@@ -445,7 +445,7 @@ const THEMES: Record<string, ITheme> = {
 interface TerminalConfig {
   renderer?: ITerminalOptions['renderer'];
   bidi?: boolean;
-  uploadFile?: (file:File)=>Promise<string>;
+  uploadFile?: (file:File)=>Promise<string|undefined>;
   autofocus?: boolean;
   fontFamily?: string;
   fontSize?: number;
@@ -553,7 +553,7 @@ class WebTerminal {
   private streamEpoch = 0;
   private connectPending = false;
   private searchAddon = new SearchAddon();
-  private uploadHandler?: (file:File)=>Promise<string>;
+  private uploadHandler?: (file:File)=>Promise<string|undefined>;
   private searchListener?: (result: SearchResults) => void;
   private mobilePositionFrame?: number;
   private composing = false;
@@ -1331,7 +1331,7 @@ class WebTerminal {
     if(!this.uploadHandler)throw new Error('Uploads are not configured.');
     if(file.size>16*1024*1024)throw new Error('File exceeds 16 MiB.');
     const path=await this.uploadHandler(file);
-    if(!this.disposed && this.ready)this.terminal.paste("'"+path.replaceAll("'","'\\''")+"' ");
+    if(path!==undefined && !this.disposed && this.ready)this.terminal.paste("'"+path.replaceAll("'","'\\''")+"' ");
   }
   private uploadFiles(files:File[]):void {
     if(files.length>8){this.element.dispatchEvent(new CustomEvent('upload-error',{detail:'Paste at most eight files.',bubbles:true}));return;}

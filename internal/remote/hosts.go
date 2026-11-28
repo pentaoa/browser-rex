@@ -33,11 +33,17 @@ type Manager struct {
 	hosts      []Host
 	engine     *vt.Engine
 	streams    chan struct{}
+	uploads    chan struct{}
 	ctx        context.Context
 	cancel     context.CancelFunc
 	pools      map[string]*hostPool
 	epoch      string
 	generation atomic.Uint64
+}
+
+// EnableUploads is used before serving requests, behind the web auth boundary.
+func (m *Manager) EnableUploads() {
+	m.uploads = make(chan struct{}, 4)
 }
 
 // New uses the caller-owned VT engine for snapshot conversion.

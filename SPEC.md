@@ -47,7 +47,7 @@ Nonce-authenticated Rex APC messages are removed from the byte stream; lookalike
 from programs remain terminal data. Fresh attachments reset browser offsets.
 Input/mutations are never retried. Disconnect closes both upstream connections
 and leaves remote sessions alive. At most 32 remote pane streams are admitted.
-Uploads, floating layouts, pre-existing snapshot graphics and non-ground parser
+Floating layouts, pre-existing snapshot graphics and non-ground parser
 continuations are unsupported. Native `hosts.list` still describes only the local
 service's discovery subset. Native layout events invalidate an opaque generation;
 `GET /api/updates?host=ID&since=GENERATION` waits at most ten seconds. Long polls do
@@ -90,7 +90,9 @@ Default supported shells receive OSC 133 PS1 hooks. Browser Previous/Next prompt
 
 ## Web image/file uploads
 
-`-uploads` plus password authentication enables one-file multipart POST uploads. The initiating session/pane must exist. The generated workspace name, detected MIME, size and absolute path are returned as JSON. Storage is rooted in a pinned directory descriptor, with no-follow/exclusive creation, complete-request validation and no-replace atomic commit. Partial files are removed. Browser clipboard/drop/file-picker integrations upload at most eight files sequentially and paste quoted paths without Enter into the initiating live pane. Limits are 16 MiB/file, four server requests and two minutes/request. No automatic retry or uploaded-file serving is provided.
+`-uploads` plus password authentication enables one-file multipart POST uploads. The initiating session and pane must exist. A local upload returns the generated workspace name, detected MIME, size and path. Storage is rooted in a pinned directory descriptor, with no-follow/exclusive creation, complete-request validation and no-replace atomic commit. The browser pastes the quoted local path without Enter.
+
+A remote upload requires a registered Rex host advertising the terminal's `upload_begin` method. The gateway stages the bounded request, gets a one-use ticket and sends the file over `rex.data.bytes.v1`. Rex stores it and pastes the path into the initiating pane. The gateway waits for Rex to confirm the transfer. Clipboard, drop and file-picker actions submit at most eight files sequentially. Limits are 16 MiB per file, four concurrent requests per upload backend and two minutes per request. Files are never served as web assets.
 
 ## Resolved image frames
 

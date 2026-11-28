@@ -171,7 +171,11 @@ try{
  await page.getByRole('button',{name:'Use vertical tabs'}).click();
  const startHost=new URL(page.url()).searchParams.get('host');
  assert.notEqual(startHost,ids.beta);
- await page.locator(`.host-group[data-host="${ids.beta}"]`).getByRole('button',{name:'New session on Build server'}).click();
+ const beta=page.locator(`.host-group[data-host="${ids.beta}"]`);
+ const newSession=beta.getByRole('button',{name:'New session on Build server'});
+ await beta.locator('.host-group-row').hover();
+ assert.equal(await newSession.evaluate(el=>el.parentElement?.className),'host-group-row');
+ await newSession.click();
  const dialog=page.locator('#action-dialog');
  assert.equal(await dialog.locator('#action-description').textContent(),'Host: Build server');
  assert.equal(new URL(page.url()).searchParams.get('host'),startHost,'opening the dialog changed hosts');
@@ -183,7 +187,17 @@ try{
  const createdSession=(await response.json()).session_id;
  await page.waitForURL(url=>url.searchParams.get('host')===ids.beta&&url.searchParams.get('session')===createdSession);
  await page.locator('.webterm-terminal.-connected').waitFor();
- assert.equal(await page.locator(`.host-group[data-host="${ids.beta}"] .host-group-caption`).textContent(),'Build workspace');
+ assert.equal(await beta.locator(`[data-session-id="${createdSession}"] .host-group-caption`).textContent(),'Build workspace');
+ const older=beta.locator(`[data-session-id="${session}"]`);
+ await older.locator('.host-session-bar').hover();
+ assert.equal(await newSession.evaluate(el=>getComputedStyle(el).pointerEvents),'none','session hover exposed the host action');
+ const adding=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/action'&&response.request().postDataJSON().op==='new-window');
+ await older.getByRole('button',{name:'New tab in Research workspace'}).click();
+ const tab=await adding;assert(tab.ok());
+ assert.equal(tab.request().postDataJSON().session,session);
+ assert.equal(new URL(tab.url()).searchParams.get('host'),ids.beta);
+ await page.waitForURL(url=>url.searchParams.get('session')===session);
+ await older.locator('#windows').waitFor();
  assert.deepEqual(errors,[]);
  console.log(JSON.stringify({result:'passed',checks:['reference sidebar/topbar geometry','rounded content/pill tabs','layout preserves terminal and socket','native per-host sidebar groups','no duplicate cached/live rows after repeated host changes','same-name windows remain selectable','local and remote application titles update automatic tabs','explicit window labels override automatic titles','single labeled footer control','cross-host tab selection','search/keyboard/custom host picker','history','safe long labels','input after resize','persistent layout','320/390px popover bounds','light/dark'],browserErrors:errors.length}));
 }catch(error){

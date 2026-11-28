@@ -21,6 +21,7 @@ type fields = map[string]any
 type control struct {
 	*websocket.Conn
 	revision   int
+	uploads    *bool
 	serial     uint64
 	mu         sync.Mutex
 	responses  chan response
@@ -204,16 +205,16 @@ func (c *control) block(session, block, method string, args any, out any) error 
 }
 
 func (m *Manager) serve(w http.ResponseWriter, r *http.Request, h Host) {
-	if r.URL.Path == "/api/capabilities" {
-		reply(w, 200, fields{"uploads": false, "remote": true})
-		return
-	}
 	if r.URL.Path == "/api/terminal" {
 		m.terminal(w, r, h)
 		return
 	}
 	if r.URL.Path == "/api/upload" {
-		failure(w, 400, "remote uploads are not supported")
+		m.upload(w, r, h)
+		return
+	}
+	if r.URL.Path == "/api/capabilities" && m.uploads == nil {
+		reply(w, 200, fields{"uploads": false, "remote": true})
 		return
 	}
 	p, err := m.pool(h)
@@ -234,6 +235,8 @@ func (m *Manager) serve(w http.ResponseWriter, r *http.Request, h Host) {
 	var result any
 	session := r.URL.Query().Get("session")
 	switch r.URL.Path {
+	case "/api/capabilities":
+		result = fields{"uploads": c.supportsUpload(r.Context()), "remote": true}
 	case "/api/sessions":
 		err = c.call("session.list", fields{}, &result)
 	case "/api/session":

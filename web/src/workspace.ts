@@ -2,7 +2,7 @@ import type { WebTerminal } from "./webterm/terminal";
 import { bindWorkspaceViewport } from "./viewport";
 import { previewSplit, type Layout, type Rect } from "./layout";
 import { hosts, localHost, selectedHost, selectHost, hostDialogOpen, hostPickerOpen, openHosts } from "./hosts";
-import { updateNavigation, windowTitle } from "./navigation";
+import { updateNavigation, updateNavigationSessions, windowTitle } from "./navigation";
 import { WorkspaceUpdates } from "./updates";
 import { bindDialog, dismissDialog } from "./dialog";
 
@@ -189,12 +189,15 @@ async function loadCapabilities() {
   uploadsEnabled=false;
   try {const value=await api<{uploads:boolean}>('/api/capabilities');if(host===selectedHost)uploadsEnabled=!!value.uploads;}catch{}
 }
-async function uploadToPane(file:File,session:string,block:string):Promise<string> {
-  if(!uploadsEnabled)throw new Error('Uploads are disabled; configure -uploads with web password authentication.');
+async function uploadToPane(file:File,host:string,session:string,block:string):Promise<string|undefined> {
   const body=new FormData();body.append('file',file,file.name);
-  const response=await fetch(endpoint('/api/upload?'+new URLSearchParams({session,block})),{method:'POST',body});
-  const result=await response.json();if(!response.ok)throw new Error(result.message??'Upload failed');
-  status.textContent=`Uploaded ${result.display_name||result.name}`;return result.path;
+  const response=await fetch(endpoint('/api/upload?'+new URLSearchParams({session,block}),host),{method:'POST',body});
+  const result=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error(result.message??`Upload failed (${response.status})`);
+  status.textContent=`Uploaded ${result.display_name||result.name||file.name}`;
+  if(result.inserted===true)return;
+  if(typeof result.path!=='string')throw new Error('Upload finished without a terminal path');
+  return result.path;
 }
 uploadInput.addEventListener('change',()=>{
   const terminal=panes.get(activeWindow?.focused_block_id??'')?.terminal;
@@ -306,6 +309,7 @@ async function refresh() {
       selectSession(list[0]?.session_id ?? "");
     }
     sessionList = list;
+    updateNavigationSessions(list);
     sessionLabel.textContent = list.find((entry) => entry.session_id === sessionId)?.label || "Sessions";
     const id = sessionId;
     if (id) {
@@ -340,15 +344,19 @@ async function refresh() {
 }
 
 async function act(op: string, args: Record<string, unknown> = {}, host = selectedHost) {
-  if (acting || (navigating && op !== "create")) return;
+  const otherSession = typeof args.session === "string" && args.session !== sessionId;
+  if (acting || (navigating && op !== "create" && !(op === "new-window" && (otherSession || host !== selectedHost)))) return;
   acting = true;
   const generation=refreshGeneration;
   refreshController?.abort();
   try {
-    const result = await api<{ session_id?: string }>("/api/action", { op, session: sessionId, ...args }, undefined, host);
+    const result = await api<{ session_id?: string; window_id?: string }>("/api/action", { op, session: sessionId, ...args }, undefined, host);
     if (generation === refreshGeneration && op === "create" && result.session_id) {
       if (host === selectedHost) selectSession(result.session_id);
       else selectHost(host, { session: result.session_id });
+    }
+    if (generation === refreshGeneration && op === 'new-window' && typeof args.session === 'string' && (host !== selectedHost || otherSession)) {
+      selectHost(host,{session:args.session,window:result.window_id});
     }
   } catch (error) {
     if(generation===refreshGeneration)status.textContent = String(error);
@@ -427,6 +435,7 @@ function mountPane(block: Block, rect: Rect, keep: Set<string>) {
     if (selectedHost) url.searchParams.set("host", selectedHost);
     const mounted = pane;
     const ownerSession=sessionId;
+    const ownerHost=selectedHost;
     const appearanceKey = () => {
       const {theme, palette} = document.documentElement.dataset;
       return theme === "dark" ? `dark:${palette}` : "light";
@@ -436,7 +445,7 @@ function mountPane(block: Block, rect: Rect, keep: Set<string>) {
       if(panes.get(id)!==mounted)return;
       terminalClass=WebTerminal;
       initialAppearance = appearanceKey();
-      return WebTerminal.create(terminal, url.href, { autofocus: false, fontSize: 14, renderer: rendererChoice, bidi: bidiEnabled, theme: terminalTheme(), uploadFile:file=>uploadToPane(file,ownerSession,id) });
+      return WebTerminal.create(terminal, url.href, { autofocus: false, fontSize: 14, renderer: rendererChoice, bidi: bidiEnabled, theme: terminalTheme(), uploadFile:file=>uploadToPane(file,ownerHost,ownerSession,id) });
     }).then((instance) => {
       if(!instance)return;
       if (panes.get(id) === mounted) {
@@ -879,6 +888,10 @@ window.addEventListener('rexweb:navigate',(event)=>{
 });
 window.addEventListener('rexweb:focus-window',event=>void act('focus-window',{window:(event as CustomEvent<string>).detail}));
 window.addEventListener('rexweb:create-session',event=>runCommand("create", undefined, "", (event as CustomEvent<string>).detail));
+window.addEventListener('rexweb:create-tab',event=>{
+  const {host,session}=(event as CustomEvent<{host:string;session:string}>).detail;
+  void act('new-window',{session},host);
+});
 window.addEventListener('rexweb:picker-dismiss',focusTerminal);
 window.addEventListener('rexweb:layout',()=>{workspaceMenu.open=false;focusTerminal();});
 function syncVisibility(){

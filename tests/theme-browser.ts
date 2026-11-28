@@ -63,6 +63,7 @@ try{
   assert.equal(await page.evaluate(()=>document.documentElement.dataset.palette),'graphite');
  }finally{release();}
  await page.waitForLoadState();await page.unroute('**/static/js/workspace-*.js');await page.locator('.webterm-terminal.-connected').waitFor();await expectTheme(page,'dark','dark','graphite');
+ await page.locator('.host-group[data-host=""] .host-group-row').hover();
  await page.getByRole('button',{name:'New session on Browser Rex local',exact:true}).click();
  const dialog=page.locator('#action-dialog');
  await dialog.waitFor();

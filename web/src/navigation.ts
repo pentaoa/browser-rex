@@ -10,6 +10,14 @@ export interface NavigationView {
   session_id:string;label:string;active_window_id?:string;windows:NavigationWindow[]|null;
   terminal_metadata?:Record<string,{title:string}>;
 }
+interface NavigationSession { session_id:string;label:string }
+interface HostGroup {
+  items:HTMLElement;
+  sessions:HTMLElement;
+  status:HTMLElement;
+  rows:Map<string,HTMLElement>;
+  summary?:string;
+}
 const rail=document.querySelector<HTMLElement>('#sidebar-hosts')!;
 const horizontal=document.querySelector<HTMLElement>('#horizontal-tabs')!;
 const tabs=document.querySelector<HTMLElement>('#windows')!;
@@ -17,7 +25,8 @@ const connection=document.querySelector<HTMLElement>('.connection-picker')!;
 const toggle=document.querySelector<HTMLButtonElement>('#layout-toggle')!;
 const footer=document.querySelector<HTMLElement>('#sidebar-footer')!;
 const currentHostCreate=document.querySelector<HTMLButtonElement>('#current-host-create')!;
-const groups=new Map<string,{element:HTMLElement;caption:HTMLElement;items:HTMLElement;summary?:string}>();
+const groups=new Map<string,HostGroup>();
+const sessionLists=new Map<string,NavigationSession[]>();
 const views=new Map<string,NavigationView>();
 const loaded=new Map<string,{at:number;endpoint:string;session?:string}>();
 const SUMMARY_MAX_AGE=30_000;
@@ -56,11 +65,49 @@ function mountCurrentTabs(group:{items:HTMLElement}){
   // Leave it attached on ordinary refreshes to preserve focus and node identity.
   if(group.items.childNodes.length!==1||group.items.firstChild!==tabs)group.items.replaceChildren(tabs);
 }
+function renderSessions(host:Host,group:HostGroup,shown?:NavigationView){
+  const list=sessionLists.get(host.id)??[];
+  const present=new Set(list.map(session=>session.session_id));
+  for(const [id,row] of group.rows)if(!present.has(id)){
+    if(row.contains(group.items))group.sessions.after(group.items);
+    row.remove();group.rows.delete(id);
+  }
+  let cursor=group.sessions.firstElementChild;
+  for(const session of list){
+    const id=session.session_id;
+    let row=group.rows.get(id);
+    if(!row){
+      row=document.createElement('section');row.dataset.sessionId=id;
+      const bar=document.createElement('div');bar.className='host-session-bar';
+      const name=document.createElement('button');name.className='host-group-caption';name.type='button';
+      name.addEventListener('click',()=>selectHost(host.id,{session:id}));
+      const create=document.createElement('button');create.type='button';create.className='host-row-action';
+      create.append(icon('plus'));
+      create.addEventListener('click',()=>window.dispatchEvent(new CustomEvent('rexweb:create-tab',{detail:{host:host.id,session:id}})));
+      bar.append(name,create);row.append(bar);
+      group.rows.set(id,row);
+    }
+    const label=session.label||'Session';
+    const name=row.querySelector<HTMLButtonElement>('.host-group-caption')!;
+    if(name.textContent!==label)name.textContent=label;
+    name.title=label;
+    if(host.id===selectedHost&&id===shown?.session_id)name.setAttribute('aria-current','true');
+    else name.removeAttribute('aria-current');
+    const create=row.querySelector<HTMLButtonElement>('.host-row-action')!;
+    create.title=`New tab in ${label}`;
+    create.setAttribute('aria-label',create.title);
+    if(row!==cursor)group.sessions.insertBefore(row,cursor);else cursor=cursor.nextElementSibling;
+  }
+  const owner=shown&&group.rows.get(shown.session_id);
+  if(owner&&group.items.parentElement!==owner)owner.append(group.items);
+  group.items.hidden=!owner;
+  group.status.hidden=list.length>0;
+}
 function backgroundTabs(host:Host){
   const group=groups.get(host.id)!;
-  if(host.id===selectedHost){mountCurrentTabs(group);group.caption.textContent=current?.label??'Sessions';return;}
+  if(host.id===selectedHost){mountCurrentTabs(group);renderSessions(host,group,current);return;}
   const view=views.get(host.id);
-  group.caption.textContent=view?.label??'Select a workspace';
+  renderSessions(host,group,view);
   const summary=JSON.stringify([view?.session_id,view?.label,view?.windows?.map(w=>[w.window_id,windowTitle(w,view.terminal_metadata)])]);
   if(group.summary===summary&&!group.items.contains(tabs)&&group.items.children.length===(view?.windows?.length??0))return;
   group.summary=summary;group.items.replaceChildren();
@@ -78,7 +125,7 @@ function backgroundTabs(host:Host){
         await request(host.id,'api/action',{op:'close-window',session:view!.session_id,window:entry.window_id});
         views.set(host.id,await request(host.id,'api/session?'+new URLSearchParams({session:view!.session_id})));
         if(vertical)backgroundTabs(host);
-      }catch{group.caption.textContent='Could not close tab';close.disabled=false;}
+      }catch{group.status.textContent='Could not close tab';group.status.hidden=false;close.disabled=false;}
     })());
     row.append(button,close);group.items.append(row);
   }
@@ -97,18 +144,20 @@ function renderGroups(){
       button.append(icon(host.id?'globe':'device'),name);
       button.title=`${host.label} · ${hostDescription(host)}`;
       button.addEventListener('click',()=>selectHost(host.id));
-      const caption=document.createElement('div');caption.className='host-group-caption';
-      const sessionBar=document.createElement('div');sessionBar.className='host-session-bar';
+      const heading=document.createElement('div');heading.className='host-group-row';
       const create=document.createElement('button');
-      create.type='button';create.className='host-session-create';
+      create.type='button';create.className='host-row-action';
       create.title=`New session on ${host.label}`;
       create.setAttribute('aria-label',create.title);
       create.setAttribute('aria-haspopup','dialog');
-      create.append(icon('plus'),'New session');
+      create.append(icon('plus'));
       create.addEventListener('click',()=>requestSessionCreation(host.id));
-      sessionBar.append(caption,create);
+      heading.append(button,create);
+      const sessions=document.createElement('div');sessions.className='host-sessions';
+      const status=document.createElement('div');status.className='host-group-status';status.textContent='No sessions';
       const items=document.createElement('div');items.className='host-group-tabs';
-      element.append(button,sessionBar,items);rail.append(element);groups.set(host.id,{element,caption,items});
+      element.append(heading,status,sessions,items);rail.append(element);
+      groups.set(host.id,{items,sessions,status,rows:new Map()});
     }
   }
   for(const host of all)backgroundTabs(host);
@@ -134,13 +183,14 @@ async function loadBackground(){
       const host=queue.shift()!;
       try{
         const result=await request(host.id,'api/sessions',undefined,signal);
-        const sessions:{session_id:string;label:string}[]=result.sessions??[];
+        const sessions:NavigationSession[]=result.sessions??[];
+        if(!signal.aborted)sessionLists.set(host.id,sessions);
         const session=sessions.find(s=>s.session_id===preferredSession(host.id))??sessions[0];
         if(session){const view=await request(host.id,'api/session?'+new URLSearchParams({session:session.session_id}),undefined,signal);if(!signal.aborted)views.set(host.id,view);}
         else if(!signal.aborted)views.delete(host.id);
         if(!signal.aborted)loaded.set(host.id,{at:performance.now(),endpoint:host.endpoint,session:session?.session_id});
         if(!signal.aborted&&vertical&&host.id!==selectedHost)backgroundTabs(host);
-      }catch{const group=groups.get(host.id);if(!signal.aborted&&host.id!==selectedHost&&group)group.caption.textContent='Connection unavailable';}
+      }catch{const group=groups.get(host.id);if(!signal.aborted&&host.id!==selectedHost&&group){group.status.textContent='Connection unavailable';group.status.hidden=false;}}
     }
   }));
 }
@@ -154,8 +204,15 @@ export function updateNavigation(view?:NavigationView){
   document.querySelector('#content-title')!.textContent = appTitle || (active ? windowTitle(active,view?.terminal_metadata) : "Terminal");
   if(vertical){
     const group=groups.get(selectedHost);
-    if(group){mountCurrentTabs(group);group.caption.textContent=view?.label??'Sessions';}
+    const host=groupHosts().find(host=>host.id===selectedHost);
+    if(group&&host){mountCurrentTabs(group);renderSessions(host,group,view);}
   }
+}
+export function updateNavigationSessions(sessions:NavigationSession[]){
+  sessionLists.set(selectedHost,sessions);
+  const host=groupHosts().find(host=>host.id===selectedHost);
+  const group=groups.get(selectedHost);
+  if(vertical&&group&&host)renderSessions(host,group,current);
 }
 function setLayout(value:boolean, remember:boolean){
   vertical=value;document.body.dataset.layout=value?'vertical':'horizontal';
@@ -172,7 +229,7 @@ function setLayout(value:boolean, remember:boolean){
 toggle.addEventListener('click',()=>setLayout(!vertical,true));
 window.addEventListener('rexweb:hosts-changed',()=>{
   const present=new Set(groupHosts().map(host=>host.id));
-  for(const id of views.keys())if(!present.has(id)){views.delete(id);loaded.delete(id);}
+  for(const id of sessionLists.keys())if(!present.has(id)){sessionLists.delete(id);views.delete(id);loaded.delete(id);}
   if(vertical){renderGroups();void loadBackground();}
 });
 window.addEventListener('rexweb:navigate',()=>{
