@@ -5,6 +5,7 @@ const initialSession=new URLSearchParams(location.search).get('session');
 if(initialSession)lastSessions.set(selectedHost,initialSession);
 
 export interface Host { id: string; label: string; endpoint: string }
+export const localHost: Host = {id:"",label:"Browser Rex local",endpoint:""};
 const dialog = document.querySelector<HTMLDialogElement>("#hosts-dialog")!;
 const picker = document.querySelector<HTMLButtonElement>("#host-picker")!;
 const create = document.querySelector<HTMLButtonElement>("#current-host-create")!;
@@ -24,16 +25,16 @@ function hostIcon(id: string) {
   use.setAttribute("href", `#icon-${id}`); svg.append(use); return svg;
 }
 export function hostDescription(host: Host) {
-  return host.id ? new URL(host.endpoint).host : "This server";
+  return host.id ? new URL(host.endpoint).host : "Built-in shell";
 }
 function updatePicker() {
-  const host = [{id:"",label:"Local",endpoint:""}, ...hosts].find(h => h.id === selectedHost);
+  const host = selectedHost ? hosts.find(h => h.id === selectedHost) : localHost;
   picker.dataset.value = selectedHost;
   document.querySelector("#host-label")!.textContent = host?.label ?? "Unavailable host";
   document.querySelector("#host-detail")!.textContent = host ? hostDescription(host) : selectedHost;
   picker.querySelector(".host-symbol use")!.setAttribute("href", selectedHost ? "#icon-globe" : "#icon-device");
   picker.title = host ? `${host.label} · ${hostDescription(host)}` : "Choose host";
-  create.title = `New session on ${selectedHost ? host?.label ?? selectedHost : "This server"}`;
+  create.title = `New session on ${host?.label ?? selectedHost}`;
   create.setAttribute("aria-label", create.title);
 }
 function highlight(index: number) {
@@ -45,7 +46,7 @@ function highlight(index: number) {
 }
 function renderOptions() {
   const query = hostFilter.value.trim().toLocaleLowerCase();
-  filtered = [{id:"",label:"Local",endpoint:""}, ...hosts].filter(h => `${h.label} ${h.endpoint}`.toLocaleLowerCase().includes(query));
+  filtered = [localHost, ...hosts].filter(h => `${h.label} ${h.endpoint}`.toLocaleLowerCase().includes(query));
   options.replaceChildren();
   filtered.forEach((host,i) => {
     const row = document.createElement("button"); row.type = "button";

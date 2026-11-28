@@ -24,7 +24,7 @@ try{
   for(let i=0;i<200&&!logs.includes('Ready:');i++){assert(child.exitCode===null,logs);await Bun.sleep(50);}
   const address=logs.match(/Web listener at (\S+)/)?.[1];assert(address,logs);origin='http://'+address;
   browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH,headless:true,args:['--no-sandbox','--no-proxy-server']});
-  const context=await browser.newContext({viewport:{width:1280,height:800}});
+  const context=await browser.newContext({viewport:{width:1280,height:800},deviceScaleFactor:2});
   // Fulfilled iframe documents have no network address space. Grant only this
   // disposable loopback origin access to its own terminal WebSocket.
   await context.grantPermissions(['local-network-access'],{origin});
@@ -64,6 +64,7 @@ try{
       prototype.fillText=function(text,x,y,maxWidth){
         if(text==='zhong'){
           this.canvas.dataset.preeditBaseline=this.textBaseline;
+          this.canvas.dataset.preeditPoint=JSON.stringify([x,y]);
           prototype.fillText=original;
         }
         original.call(this,text,x,y,maxWidth);
@@ -71,9 +72,26 @@ try{
     });
     await cdp.send('Input.imeSetComposition',{text:'zhong',selectionStart:5,selectionEnd:5});
     const input=frame.locator('.webterm-terminal textarea');
-    const overlay=await frame.locator('.webterm-terminal').evaluate(el=>{const canvases=[...el.querySelectorAll('canvas')];const main=canvases[0].getBoundingClientRect(),preedit=canvases[1].getBoundingClientRect();return {dx:preedit.left-main.left,dy:preedit.top-main.top};});
-    assert(Math.abs(overlay.dx)<1&&Math.abs(overlay.dy)<1,'preedit overlay detached from terminal canvas');
+    const overlay=await frame.locator('.webterm-terminal').evaluate(el=>{
+      const [main,preedit]=Array.from(el.querySelectorAll('canvas'));
+      const a=main.getBoundingClientRect(),b=preedit.getBoundingClientRect();
+      return {
+        dx:b.left-a.left,dy:b.top-a.top,dw:b.width-a.width,dh:b.height-a.height,
+        scaledWidth:a.width-main.width/devicePixelRatio,scaledHeight:a.height-main.height/devicePixelRatio,
+      };
+    });
+    assert(Object.values(overlay).every(delta=>Math.abs(delta)<.5),
+      'terminal and preedit use different pixel geometry: '+JSON.stringify(overlay));
     assert.equal(await frame.locator('.webterm-terminal canvas').nth(1).getAttribute('data-preedit-baseline'),'alphabetic','preedit text baseline differed from terminal glyphs');
+    const anchor=await input.evaluate(el=>{
+      const overlay=el.parentElement!.querySelector<HTMLCanvasElement>('canvas[data-preedit-point]')!;
+      const [x,y]=JSON.parse(overlay.dataset.preeditPoint!);
+      const bounds=el.getBoundingClientRect(),grid=overlay.getBoundingClientRect();
+      return {width:bounds.width,wrap:(el as HTMLTextAreaElement).wrap,dx:bounds.left-grid.left-x,baseline:grid.top+y-bounds.top,height:bounds.height};
+    });
+    assert(anchor.width>20&&anchor.wrap==='off','IME input constrained or wrapped the composition');
+    assert(Math.abs(anchor.dx)<.5&&anchor.baseline>0&&anchor.baseline<anchor.height,
+      'native input and preedit use different cells: '+JSON.stringify(anchor));
     assert.equal(await input.inputValue(),'zhong','preedit was cleared');
     await input.dispatchEvent('keydown',{key:'Enter',code:'Enter',keyCode:229,isComposing:true});
     await cdp.send('Input.imeSetComposition',{text:'中文输入',selectionStart:4,selectionEnd:4});

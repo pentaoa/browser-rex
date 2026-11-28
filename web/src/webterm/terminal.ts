@@ -790,6 +790,7 @@ class WebTerminal {
     this.element.removeAttribute("aria-multiline");
     if (!this.mobileKeyboard && this.terminal.textarea) {
       const input = this.terminal.textarea;
+      input.wrap = "off";
       Object.assign(input.style, {
         clipPath: "none", height: "20px", padding: "0", margin: "0",
         border: "0", outline: "none", fontFamily: this.fontFamily,
@@ -1260,7 +1261,7 @@ class WebTerminal {
     this.socket?.close();
   }
 
-  private cursorAnchor(): { left: number; top: number; height: number } {
+  private cursorAnchor(): { left: number; top: number; right: number; height: number } {
     const renderer = this.terminal.renderer;
     const canvas = renderer?.getCanvas();
     const rect = (canvas ?? this.element).getBoundingClientRect();
@@ -1269,6 +1270,7 @@ class WebTerminal {
     return {
       left: rect.left + cursor.x * metrics.width,
       top: rect.top + cursor.y * metrics.height,
+      right: rect.right,
       height: metrics.height,
     };
   }
@@ -1289,11 +1291,12 @@ class WebTerminal {
     const rect = this.element.getBoundingClientRect();
     // The textarea is positioned in the same coordinate system as its canvas,
     // including inside an iframe or a split. No viewport-fixed fake input.
+    const left = Math.max(0, Math.min(rect.width - 2, anchor.left - rect.left));
     input.style.position = "absolute";
-    input.style.width = "1px";
+    input.style.width = `${Math.max(1, Math.min(rect.right, anchor.right) - rect.left - left)}px`;
     input.style.zIndex = "0";
     input.style.pointerEvents = "none";
-    input.style.left = `${Math.max(0, Math.min(rect.width - 2, anchor.left - rect.left))}px`;
+    input.style.left = `${left}px`;
     input.style.top = `${Math.max(0, Math.min(rect.height - anchor.height, anchor.top - rect.top))}px`;
     input.style.height = `${anchor.height}px`;
     input.style.lineHeight = `${anchor.height}px`;

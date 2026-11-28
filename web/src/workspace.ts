@@ -1,7 +1,7 @@
 import type { WebTerminal } from "./webterm/terminal";
 import { bindWorkspaceViewport } from "./viewport";
 import { previewSplit, type Layout, type Rect } from "./layout";
-import { hosts, selectedHost, selectHost, hostDialogOpen, hostPickerOpen, openHosts } from "./hosts";
+import { hosts, localHost, selectedHost, selectHost, hostDialogOpen, hostPickerOpen, openHosts } from "./hosts";
 import { updateNavigation, windowTitle } from "./navigation";
 import { WorkspaceUpdates } from "./updates";
 import { bindDialog, dismissDialog } from "./dialog";
@@ -680,7 +680,7 @@ function runCommand(op: string, block = activeWindow?.focused_block_id, initialN
   if (op === "create" || op === "rename" || op === "destroy" || op === "close-block") {
     actionDialog.dataset.action = op;
     const naming = op === "create" || op === "rename";
-    const hostLabel = host ? hosts.find(entry => entry.id === host)?.label ?? host : "This server";
+    const hostLabel = host ? hosts.find(entry => entry.id === host)?.label ?? host : localHost.label;
     const label = op === "create" ? "New session" : op === "rename" ? "Rename session" :
       op === "destroy" ? "End session?" : "Close pane?";
     document.querySelector("#action-title")!.textContent = label;

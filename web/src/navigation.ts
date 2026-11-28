@@ -1,4 +1,4 @@
-import {hosts,selectedHost,selectHost,preferredSession,hostDescription,type Host} from './hosts';
+import {hosts,localHost,selectedHost,selectHost,preferredSession,hostDescription,type Host} from './hosts';
 
 export interface NavigationWindow {
   window_id: string;
@@ -46,7 +46,7 @@ export function windowTitle(window: NavigationWindow, metadata?: NavigationView[
   }
   return "Terminal";
 }
-function groupHosts():Host[]{return [{id:'',label:'Local',endpoint:''},...hosts];}
+function groupHosts():Host[]{return [localHost,...hosts];}
 function requestSessionCreation(host:string){
   window.dispatchEvent(new CustomEvent('rexweb:create-session',{detail:host}));
 }
@@ -93,15 +93,15 @@ function renderGroups(){
     for(const host of all){
       const element=document.createElement('section');element.className='host-group';element.dataset.host=host.id;
       const button=document.createElement('button');button.className='host-group-heading';
-      const name=document.createElement('span');name.textContent=host.id?hostDescription(host):'This server';
-      button.append(icon(host.id?'globe':'device'),name);button.title=host.label;
+      const name=document.createElement('span');name.textContent=host.label;
+      button.append(icon(host.id?'globe':'device'),name);
+      button.title=`${host.label} · ${hostDescription(host)}`;
       button.addEventListener('click',()=>selectHost(host.id));
       const caption=document.createElement('div');caption.className='host-group-caption';
       const sessionBar=document.createElement('div');sessionBar.className='host-session-bar';
       const create=document.createElement('button');
       create.type='button';create.className='host-session-create';
-      const target=host.id?host.label:'This server';
-      create.title=`New session on ${target}`;
+      create.title=`New session on ${host.label}`;
       create.setAttribute('aria-label',create.title);
       create.setAttribute('aria-haspopup','dialog');
       create.append(icon('plus'),'New session');

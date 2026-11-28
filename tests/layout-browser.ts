@@ -60,6 +60,8 @@ try{
  assert.equal(await page.locator('body').getAttribute('data-layout'),'vertical','new workspaces should default to sidebar tabs');
  assert.equal(await page.locator('#connection-status').count(),0,'connection dot still rendered');
  await page.locator('.host-group').nth(3).waitFor();await page.waitForFunction(()=>[...document.querySelectorAll('.host-group-caption')].every(el=>el.textContent==='Research workspace'));
+ assert.equal(await page.locator('.host-group[data-host=""] .host-group-heading').textContent(),'Browser Rex local');
+ assert.equal(await page.locator(`.host-group[data-host="${ids.alpha}"] .host-group-heading`).textContent(),'Studio server');
  await page.waitForFunction(()=>document.querySelectorAll('.host-group-tabs .window-tab').length===8);
  assert.deepEqual(await page.locator('#windows .tab-label').allTextContents(),['shell','shell']);
  assert.deepEqual(await page.locator(`.host-group[data-host="${ids.gamma}"] .tab-label`).allTextContents(),['Build runner','Release notes']);

@@ -61,7 +61,9 @@ html {
 
 /* ghostty-web renders to a canvas element */
 .webterm-terminal canvas {
-  flex: 1 1 auto;
+  /* The renderer sizes a whole-cell grid. Keep its backing pixels and IME
+     overlay at that size even when a pane has room for part of another row. */
+  flex: none;
   min-width: 0;
   min-height: 0;
   display: block;
