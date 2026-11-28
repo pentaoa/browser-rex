@@ -254,10 +254,13 @@ function updateMetadata(next:View) {
   for (const entry of next.windows ?? []) {
     const label = tabs.get(entry.window_id)?.querySelector('.tab-label');
     if (label) {
-      const title=windowTitle(entry);label.textContent=title;
+      const title=windowTitle(entry,next.terminal_metadata);
+      if(label.textContent===title)continue;
+      label.textContent=title;
       const tab=tabs.get(entry.window_id)!;
       tab.querySelector<HTMLButtonElement>('.tab-select')!.title=title;
       tab.querySelector('.tab-close')!.setAttribute('aria-label',`Close tab: ${title}`);
+      tab.querySelector<HTMLButtonElement>('.tab-close')!.title=`Close ${title} and its terminals`;
     }
   }
   updateNavigation(next);
@@ -605,7 +608,7 @@ function render() {
       tab.append(select,close);
       tabs.set(entry.window_id,tab);
     }
-    const label=windowTitle(entry);
+    const label=windowTitle(entry,view?.terminal_metadata);
     const name=tab.querySelector('.tab-label')!;
     if(name.textContent!==label)name.textContent=label;
     const select=tab.querySelector('button')!;

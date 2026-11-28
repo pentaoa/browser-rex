@@ -84,7 +84,7 @@ The server is authoritative for terminal query replies. The embedded browser set
 
 ## Program and prompt effects
 
-The server records bounded OSC 7501 statuses and reported title/pwd using Ghostty callbacks. HTTP session views carry a separate terminal_metadata extension for browser badges, leaving native Rex session-view shapes unchanged. Native program_status/title/pwd read the same metadata. Records and prompt events are cleared on VT reset; process exit and VT failure are reflected in browser state.
+The server records bounded OSC 7501 statuses and reported title/pwd using Ghostty callbacks. HTTP session views carry a separate terminal_metadata extension for browser badges and automatic tab titles, leaving native Rex session-view shapes unchanged. Native program_status/title/pwd read the same metadata. Native terminal title changes publish a `title_changed` block event. The remote gateway reads the focused terminal's title for each tab and uses those events to invalidate cached views. Explicit window labels take precedence in the tab strip. Records and prompt events are cleared on VT reset; process exit and VT failure are reflected in browser state.
 
 Default supported shells receive OSC 133 PS1 hooks. Browser Previous/Next prompt navigation uses the client's core marks, temporarily reading core scroll positions and restoring the live viewport before updating external scroll state. No shell input is emitted.
 

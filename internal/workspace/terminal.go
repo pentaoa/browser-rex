@@ -23,6 +23,7 @@ type pane struct {
 	owner    string // Protected by Store.mu.
 	inputMu  sync.Mutex
 	onChange func()
+	onTitle  func(block, title string)
 
 	mu            sync.Mutex
 	history       outputHistory
@@ -32,6 +33,7 @@ type pane struct {
 	state         *vt.State
 	stateErr      error
 	stateRevision uint64
+	title         string
 	blobs         map[uint32]captureBlob
 	nextBlob      uint32
 	exitCode      int
@@ -54,7 +56,7 @@ type paneUpdate struct {
 	size   *pty.Winsize
 }
 
-func startPane(sandbox Sandbox, shell string, engine *vt.Engine, onChange func()) (*pane, error) {
+func startPane(sandbox Sandbox, shell string, engine *vt.Engine, onChange func(), onTitle func(block, title string)) (*pane, error) {
 	var state *vt.State
 	var err error
 	if engine != nil {
@@ -120,7 +122,7 @@ func startPane(sandbox Sandbox, shell string, engine *vt.Engine, onChange func()
 		return nil, err
 	}
 
-	p := &pane{id: newID("block"), file: file, process: cmd.Process, state: state, onChange: onChange, size: pty.Winsize{Cols: 80, Rows: 24}}
+	p := &pane{id: newID("block"), file: file, process: cmd.Process, state: state, onChange: onChange, onTitle: onTitle, size: pty.Winsize{Cols: 80, Rows: 24}}
 	wait := make(chan int, 1)
 	go func() {
 		cmd.Wait()
@@ -199,6 +201,10 @@ func (p *pane) publish(data []byte) {
 		revision := p.state.Revision()
 		if p.stateErr != nil || revision != p.stateRevision {
 			p.stateRevision = revision
+			if title := p.state.Title(); p.title != title {
+				p.title = title
+				p.onTitle(p.id, title)
+			}
 			p.onChange()
 		}
 	}

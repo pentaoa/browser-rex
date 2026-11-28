@@ -20,15 +20,16 @@ const (
 )
 
 type Store struct {
-	mu       sync.Mutex
-	changes  workspaceChanges
-	shell    string
-	sandbox  Sandbox
-	sessions []*session
-	hostID   string
-	watchers map[chan workspaceEvent]struct{}
-	vtEngine *vt.Engine
-	uploads  *uploadRoot
+	mu         sync.Mutex
+	changes    workspaceChanges
+	shell      string
+	sandbox    Sandbox
+	sessions   []*session
+	hostID     string
+	watchersMu sync.Mutex
+	watchers   map[chan workspaceEvent]struct{}
+	vtEngine   *vt.Engine
+	uploads    *uploadRoot
 }
 
 type session struct {
@@ -108,7 +109,7 @@ func (s *Store) find(id string) *session {
 	return nil
 }
 
-func (s *Store) newPane() (*pane, error) {
+func (s *Store) newPane(session string) (*pane, error) {
 	count := 0
 	for _, session := range s.sessions {
 		count += len(session.panes)
@@ -116,7 +117,12 @@ func (s *Store) newPane() (*pane, error) {
 	if count >= maxPanes {
 		return nil, &apiError{http.StatusConflict, "pane limit reached"}
 	}
-	return startPane(s.sandbox, s.shell, s.vtEngine, s.changes.advance)
+	return startPane(s.sandbox, s.shell, s.vtEngine, s.changes.advance, func(block, title string) {
+		s.sessionEvent(session, "block_event", fields{
+			"block_id": block, "creator_name": rexTerminalCreator,
+			"name": "title_changed", "payload": fields{"title": title},
+		})
+	})
 }
 
 func (s *session) addWindow(p *pane, name string) *window {
@@ -172,11 +178,12 @@ func (s *Store) mutateLocked(a action) (fields, error) {
 		if len(s.sessions) >= maxSessions {
 			return nil, &apiError{http.StatusConflict, "session limit reached"}
 		}
-		p, err := s.newPane()
+		id := newID("session")
+		p, err := s.newPane(id)
 		if err != nil {
 			return nil, err
 		}
-		item := &session{ID: newID("session"), Label: label(a.Label), rev: 1, panes: make(map[string]*pane)}
+		item := &session{ID: id, Label: label(a.Label), rev: 1, panes: make(map[string]*pane)}
 		tab := item.addWindow(p, a.WindowLabel)
 		s.sessions = append(s.sessions, item)
 		return fields{"session_id": item.ID, "initial_windows": []fields{createdWindow(tab)}}, nil
@@ -201,7 +208,7 @@ func (s *Store) mutateLocked(a action) (fields, error) {
 			p.close()
 		}
 	case "new-window":
-		p, err := s.newPane()
+		p, err := s.newPane(item.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -249,7 +256,7 @@ func (s *Store) mutateLocked(a action) (fields, error) {
 			if !validDirection(a.Direction) || (a.Side != "" && a.Side != "before" && a.Side != "after") || ratio <= 0 || ratio >= 1 {
 				return nil, invalid("split direction, side or ratio")
 			}
-			p, err := s.newPane()
+			p, err := s.newPane(item.ID)
 			if err != nil {
 				return nil, err
 			}

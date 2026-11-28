@@ -533,6 +533,12 @@ func (s *State) Revision() uint64 {
 	return s.info.Revision
 }
 
+func (s *State) Title() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.info.Title
+}
+
 func (s *State) Info() Info {
 	s.mu.Lock()
 	defer s.mu.Unlock()

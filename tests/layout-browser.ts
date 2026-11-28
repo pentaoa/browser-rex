@@ -26,6 +26,7 @@ try{
  const extra=await request('/api/action',{op:'new-window',session});
  await request('/api/action',{op:'rename-window',session,window:original,label:'Window 1'});
  await request('/api/action',{op:'rename-window',session,window:extra.window_id,label:'Window 2'});
+ await request('/api/action',{op:'focus-window',session,window:original});
  browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH,args:['--no-sandbox','--no-proxy-server']});
  const context=await browser.newContext({viewport:{width:1100,height:800},colorScheme:'dark'});const page=await context.newPage();currentPage=page;
  async function selectedTabs(host:string,count:number){
@@ -65,7 +66,7 @@ try{
  await page.keyboard.insertText("printf '\\033]0;Example application\\007'");
  await page.keyboard.press('Enter');
  await page.waitForFunction(()=>document.querySelector('#content-title')?.textContent==='Example application');
- assert.deepEqual(await page.locator('#windows .tab-label').allTextContents(),['shell','shell']);
+ assert.deepEqual(await page.locator('#windows .tab-label').allTextContents(),['Example application','shell']);
  assert.equal(await page.locator('.host-group[data-host=""] .host-group-caption').textContent(),'Research workspace');
  assert.equal(await page.locator('#navigation').evaluate(el=>Math.round(el.getBoundingClientRect().width)),210);
  assert.equal(await page.locator('#terminal-surface').evaluate(el=>getComputedStyle(el).borderTopLeftRadius),'12px');
@@ -85,6 +86,18 @@ try{
  assert.equal((await request('/api/session?'+new URLSearchParams({session}))).active_window_id,original,'sidebar selected the wrong window');
  assert.equal(await page.locator(`.host-group[data-host="${ids.alpha}"] .window-tab`).count(),2,'selected host retained duplicate cached tabs');
  await selectedTabs(ids.alpha,2);
+ assert.equal(await page.locator('#windows .tab-label').first().textContent(),'Example application','remote title missing on first attach');
+ await page.keyboard.insertText("printf '\\033]0;研究任务 · 构建报告\\007'");
+ await page.keyboard.press('Enter');
+ await page.waitForFunction(()=>document.querySelector('#windows .tab-label')?.textContent==='研究任务 · 构建报告');
+ await request('/api/action',{op:'rename-window',session,window:original,label:'Pinned workspace'});
+ await page.waitForFunction(()=>document.querySelector('#windows .tab-label')?.textContent==='Pinned workspace');
+ assert.equal(await page.locator('#content-title').textContent(),'研究任务 · 构建报告','explicit tab name replaced the application heading');
+ await request('/api/action',{op:'rename-window',session,window:original,label:'Window 1'});
+ await page.waitForFunction(()=>document.querySelector('#windows .tab-label')?.textContent==='研究任务 · 构建报告');
+ await page.keyboard.insertText("printf '\\033]0;\\007'");
+ await page.keyboard.press('Enter');
+ await page.waitForFunction(()=>document.querySelector('#windows .tab-label')?.textContent==='shell');
  // Identical labels are legitimate for distinct windows: both stay clickable.
  for(const [index,window]of [original,extra.window_id].entries()){
   await page.locator('#windows .tab-select').nth(index).click();
@@ -170,7 +183,7 @@ try{
  await page.locator('.webterm-terminal.-connected').waitFor();
  assert.equal(await page.locator(`.host-group[data-host="${ids.beta}"] .host-group-caption`).textContent(),'Build workspace');
  assert.deepEqual(errors,[]);
- console.log(JSON.stringify({result:'passed',checks:['reference sidebar/topbar geometry','rounded content/pill tabs','layout preserves terminal and socket','native per-host sidebar groups','no duplicate cached/live rows after repeated host changes','same-name windows remain selectable','assigned terminal names stay distinct from application titles and session names','single labeled footer control','cross-host tab selection','search/keyboard/custom host picker','history','safe long labels','input after resize','persistent layout','320/390px popover bounds','light/dark'],browserErrors:errors.length}));
+ console.log(JSON.stringify({result:'passed',checks:['reference sidebar/topbar geometry','rounded content/pill tabs','layout preserves terminal and socket','native per-host sidebar groups','no duplicate cached/live rows after repeated host changes','same-name windows remain selectable','local and remote application titles update automatic tabs','explicit window labels override automatic titles','single labeled footer control','cross-host tab selection','search/keyboard/custom host picker','history','safe long labels','input after resize','persistent layout','320/390px popover bounds','light/dark'],browserErrors:errors.length}));
 }catch(error){
  const dir=process.env.REXWEB_SCREENSHOTS;if(dir&&currentPage){await mkdir(dir,{recursive:true});await currentPage.screenshot({path:join(dir,'layout-failure.png')});console.error('LAYOUT',await currentPage.evaluate(()=>({status:document.querySelector('#status')?.textContent,groups:[...document.querySelectorAll('.host-group-caption')].map(e=>e.textContent)})));}throw error;
 }finally{

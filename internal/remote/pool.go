@@ -25,6 +25,7 @@ type hostPool struct {
 	changed  chan struct{}
 	version  string
 	watchers chan struct{}
+	titles   map[string]terminalTitle
 }
 
 func (m *Manager) pool(h Host) (*hostPool, error) {
@@ -71,11 +72,21 @@ func (p *hostPool) event(raw json.RawMessage) {
 		return
 	}
 	if event.Type == "session_event" {
-		var session struct{ Event struct{ Type string } }
+		var session struct {
+			Event struct {
+				Type    string
+				Payload json.RawMessage
+			}
+		}
 		if json.Unmarshal(event.Payload, &session) != nil {
 			return
 		}
 		event.Type = session.Event.Type
+		event.Payload = session.Event.Payload
+	}
+	if event.Type == "block_event" {
+		p.titleEvent(event.Payload)
+		return
 	}
 	// Terminal output and client presence do not change the browser layout.
 	if strings.HasPrefix(event.Type, "session_") || strings.HasPrefix(event.Type, "window_") || event.Type == "active_window_changed" {
@@ -105,9 +116,12 @@ func (p *hostPool) acquire(ctx context.Context) (*control, func(), error) {
 		}
 	}
 	if p.control == nil {
+		p.mu.Lock()
+		p.titles = make(map[string]terminalTitle)
+		p.mu.Unlock()
 		c, err := connectControl(p.ctx, ctx, p.host, p.event, p.signal)
 		if err == nil {
-			err = c.callContext(ctx, "session.attach_all", fields{"event_scope": "session"}, nil)
+			err = c.callContext(ctx, "session.attach_all", fields{"event_scope": "all"}, nil)
 		}
 		if err != nil {
 			if c != nil {

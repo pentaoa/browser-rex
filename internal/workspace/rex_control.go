@@ -33,15 +33,17 @@ type rexServer struct {
 }
 
 type rexClient struct {
-	id       string
-	done     chan struct{}
-	all      bool
-	attached map[string]bool
+	id        string
+	done      chan struct{}
+	all       bool
+	allBlocks bool
+	attached  map[string]bool
 }
 
 type workspaceEvent struct {
 	session string
 	body    fields
+	block   bool
 }
 
 func (s *Store) RexHandler() http.Handler {
@@ -60,19 +62,20 @@ func eventBody(name string, data any) fields {
 }
 
 func (s *Store) observe() (chan workspaceEvent, func()) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.watchersMu.Lock()
+	defer s.watchersMu.Unlock()
 	ch := make(chan workspaceEvent, 128)
 	s.watchers[ch] = struct{}{}
 	return ch, func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+		s.watchersMu.Lock()
+		defer s.watchersMu.Unlock()
 		delete(s.watchers, ch)
 	}
 }
 
-// notify is called with Store.mu held.
 func (s *Store) notify(e workspaceEvent) {
+	s.watchersMu.Lock()
+	defer s.watchersMu.Unlock()
 	for ch := range s.watchers {
 		select {
 		case ch <- e:
@@ -84,16 +87,16 @@ func (s *Store) notify(e workspaceEvent) {
 }
 
 func (s *Store) sessionEvent(id, kind string, payload fields) {
-	s.notify(workspaceEvent{id, eventBody("session_event", fields{"session_id": id, "event": eventBody(kind, payload)})})
+	s.notify(workspaceEvent{session: id, body: eventBody("session_event", fields{"session_id": id, "event": eventBody(kind, payload)}), block: kind == "block_event"})
 }
 
 func (s *Store) notifyMutation(a action, reply fields) {
 	switch a.Op {
 	case "create":
 		id := reply["session_id"].(string)
-		s.notify(workspaceEvent{id, eventBody("session_created", fields{"session": s.find(id).summary()})})
+		s.notify(workspaceEvent{session: id, body: eventBody("session_created", fields{"session": s.find(id).summary()})})
 	case "destroy":
-		s.notify(workspaceEvent{a.Session, eventBody("session_destroyed", fields{"session_id": a.Session})})
+		s.notify(workspaceEvent{session: a.Session, body: eventBody("session_destroyed", fields{"session_id": a.Session})})
 	default:
 		if a.Op == "rename" {
 			s.sessionEvent(a.Session, "session_label_changed", fields{"label": s.find(a.Session).Label})
@@ -200,7 +203,7 @@ func (s *rexServer) control(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if client.all || client.attached[event.session] {
+			if client.allBlocks || client.attached[event.session] || (client.all && !event.block) {
 				seq++
 				if writeRex(ws, fields{"type": "event", "seq": seq, "payload": event.body}) != nil {
 					return
@@ -360,6 +363,7 @@ func (s *rexServer) call(c *rexClient, method string, payload json.RawMessage) (
 			return nil, invalid("event scope")
 		}
 		c.all = true
+		c.allBlocks = a.EventScope == "all"
 		if method == "session.bootstrap" {
 			return s.bootstrap(c, a), nil
 		}

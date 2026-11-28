@@ -238,9 +238,12 @@ func (m *Manager) serve(w http.ResponseWriter, r *http.Request, h Host) {
 		err = c.call("session.list", fields{}, &result)
 	case "/api/session":
 		var attached struct {
-			View any `json:"view"`
+			View map[string]json.RawMessage `json:"view"`
 		}
 		err = c.call("session.attach", fields{"session_id": session}, &attached)
+		if err == nil {
+			p.addTitles(c, session, attached.View)
+		}
 		result = attached.View
 	case "/api/action":
 		var a action
