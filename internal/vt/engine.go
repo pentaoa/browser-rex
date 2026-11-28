@@ -500,9 +500,12 @@ func (s *State) Feed(data []byte) ([]byte, error) {
 		return nil, err
 	}
 	if s.dirtyTitle {
-		s.info.Title, _ = s.pullString(ctx, "TITLE")
+		title, _ := s.pullString(ctx, "TITLE")
 		s.dirtyTitle = false
-		s.info.Revision++
+		if title := DisplayTitle(title); title != s.info.Title {
+			s.info.Title = title
+			s.info.Revision++
+		}
 	}
 	if s.dirtyPWD {
 		s.info.PWD, _ = s.pullString(ctx, "PWD")
@@ -531,6 +534,16 @@ func (s *State) Revision() uint64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.info.Revision
+}
+
+// DisplayTitle removes a leading braille spinner frame followed by a space.
+// Codex uses this prefix to animate its title as it works.
+func DisplayTitle(title string) string {
+	frame, text, ok := strings.Cut(title, " ")
+	if ok && len(frame) == 3 && strings.Contains("⠇⠋⠙⠹⠸⠼⠴⠦⠧⠏", frame) && text != "" {
+		return strings.TrimSpace(text)
+	}
+	return title
 }
 
 func (s *State) Title() string {
