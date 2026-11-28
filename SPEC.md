@@ -38,6 +38,11 @@ JSON files, limited to 64 KiB and 32 hosts, updated by atomic rename. URLs are
 HTTPS origins, except loopback HTTP forwards. The browser selects a stored host
 ID with `host=`; arbitrary upstream URLs and native control methods are not exposed.
 
+For a native Rex host on the same machine, `-local-host-group <registered-host-id>`
+places built-in sessions under that host's sidebar heading. A plain workspace
+URL opens the registered host, and host-level creation targets native Rex.
+Existing built-in session links and session-level actions keep their backend.
+
 Selected remote hosts negotiate API revisions 9–12. Workspace HTTP operations share
 one serialized native control connection per host; each terminal viewer owns a control
 and ticketed data connection. Interleaved control events are consumed while

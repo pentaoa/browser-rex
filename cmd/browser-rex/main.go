@@ -9,6 +9,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"html"
 	"io/fs"
 	"log"
 	"net"
@@ -38,6 +39,7 @@ type options struct {
 	anonymous, insecure, uploads                                                                           bool
 	basePath                                                                                               string
 	hostsFile                                                                                              string
+	localHostGroup                                                                                         string
 }
 
 func main() {
@@ -71,6 +73,7 @@ func main() {
 	flag.StringVar(&o.publicURL, "public-url", "", "exact external web origin, required for non-loopback web listeners")
 	flag.StringVar(&o.basePath, "base-path", "/", "web URL prefix, with leading and trailing slashes")
 	flag.StringVar(&o.hostsFile, "hosts-file", "", "private JSON file enabling persistent remote Rex host management")
+	flag.StringVar(&o.localHostGroup, "local-host-group", "", "registered Rex host ID for grouping built-in sessions and opening the workspace")
 	flag.StringVar(&o.passwordFile, "password-file", "", "private file containing web HTTP Basic password (username: rexweb)")
 	flag.StringVar(&o.cert, "tls-cert", "", "PEM TLS certificate for TCP listeners")
 	flag.StringVar(&o.key, "tls-key", "", "PEM TLS key for TCP listeners")
@@ -111,6 +114,9 @@ func (o options) validate() error {
 	}
 	if o.uploads && (o.passwordFile == "" || o.mode == "rex") {
 		return errors.New("-uploads requires a web listener and -password-file")
+	}
+	if o.localHostGroup != "" && (o.hostsFile == "" || o.mode == "rex") {
+		return errors.New("-local-host-group requires a web listener and -hosts-file")
 	}
 	if (o.cert == "") != (o.key == "") {
 		return errors.New("-tls-cert and -tls-key must be supplied together")
@@ -201,7 +207,12 @@ func webHandler(o options, store *workspace.Store, assets fs.FS, password string
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(bytes.ReplaceAll(index, []byte("__REXWEB_BASE_PATH__"), []byte(basePath)))
+		index = bytes.ReplaceAll(index, []byte("__REXWEB_BASE_PATH__"), []byte(basePath))
+		group := ""
+		if manager != nil && o.localHostGroup != "" && manager.HasHost(o.localHostGroup) {
+			group = html.EscapeString(o.localHostGroup)
+		}
+		w.Write(bytes.ReplaceAll(index, []byte("__REXWEB_LOCAL_HOST_GROUP__"), []byte(group)))
 	})
 	var frontend http.Handler = staticHandler(assets)
 	if o.webdir != "" {

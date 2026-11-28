@@ -69,6 +69,12 @@ try{
  await page.keyboard.press('Enter');
  await page.waitForFunction(()=>document.querySelector('#content-title')?.textContent==='Example application');
  assert.deepEqual(await page.locator('#windows .tab-label').allTextContents(),['Example application','shell']);
+ await page.keyboard.insertText("printf '\\033]0;⠹ Example application\\007'");
+ await page.keyboard.press('Enter');
+ const busyTab=page.locator('#windows .tab-label[data-title-busy]');
+ await busyTab.waitFor();
+ assert.equal(await busyTab.textContent(),'Example application');
+ assert.equal(await busyTab.evaluate(el=>getComputedStyle(el,'::before').animationName),'title-activity');
  assert.equal(await page.locator('.host-group[data-host=""] .host-group-caption').textContent(),'Research workspace');
  assert.equal(await page.locator('#navigation').evaluate(el=>Math.round(el.getBoundingClientRect().width)),210);
  assert.equal(await page.locator('#terminal-surface').evaluate(el=>getComputedStyle(el).borderTopLeftRadius),'12px');

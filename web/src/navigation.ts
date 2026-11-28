@@ -1,4 +1,4 @@
-import {hosts,localHost,selectedHost,selectHost,preferredSession,hostDescription,type Host} from './hosts';
+import {hosts,localHost,groupedLocalHost,selectedHost,selectHost,preferredSession,hostDescription,type Host} from './hosts';
 
 export interface NavigationWindow {
   window_id: string;
@@ -55,11 +55,18 @@ export function windowTitle(window: NavigationWindow, metadata?: NavigationView[
   }
   return "Terminal";
 }
+export function paintTitle(element: Element, title: string, reported = title) {
+  const busy = reported.startsWith('⠋ ');
+  const text = title.startsWith('⠋ ') ? title.slice(2) : title;
+  element.toggleAttribute('data-title-busy', busy);
+  if(element.textContent!==text)element.textContent=text;
+  return text;
+}
 function groupHosts():Host[]{return [localHost,...hosts];}
 function requestSessionCreation(host:string){
   window.dispatchEvent(new CustomEvent('rexweb:create-session',{detail:host}));
 }
-currentHostCreate.addEventListener('click',()=>requestSessionCreation(selectedHost));
+currentHostCreate.addEventListener('click',()=>requestSessionCreation(selectedHost||groupedLocalHost()?.id||''));
 function mountCurrentTabs(group:{items:HTMLElement}){
   // A selected host replaces its cached summary with the one live tab strip.
   // Leave it attached on ordinary refreshes to preserve focus and node identity.
@@ -90,7 +97,7 @@ function renderSessions(host:Host,group:HostGroup,shown?:NavigationView){
     const label=session.label||'Session';
     const name=row.querySelector<HTMLButtonElement>('.host-group-caption')!;
     if(name.textContent!==label)name.textContent=label;
-    name.title=label;
+    name.title=!host.id&&groupedLocalHost()?`Built-in shell · ${label}`:label;
     if(host.id===selectedHost&&id===shown?.session_id)name.setAttribute('aria-current','true');
     else name.removeAttribute('aria-current');
     const create=row.querySelector<HTMLButtonElement>('.host-row-action')!;
@@ -108,17 +115,18 @@ function backgroundTabs(host:Host){
   if(host.id===selectedHost){mountCurrentTabs(group);renderSessions(host,group,current);return;}
   const view=views.get(host.id);
   renderSessions(host,group,view);
-  const summary=JSON.stringify([view?.session_id,view?.label,view?.windows?.map(w=>[w.window_id,windowTitle(w,view.terminal_metadata)])]);
+  const summary=JSON.stringify(view?.windows?.map(w=>[view.session_id,w.window_id,windowTitle(w,view.terminal_metadata),view.terminal_metadata?.[w.focused_block_id??'']?.title]));
   if(group.summary===summary&&!group.items.contains(tabs)&&group.items.children.length===(view?.windows?.length??0))return;
   group.summary=summary;group.items.replaceChildren();
   for(const entry of view?.windows??[]){
     const row=document.createElement('div');row.className='window-tab';row.dataset.active='false';
     const button=document.createElement('button');button.className='tab-select';
-    const name=document.createElement('span');name.className='tab-label';name.textContent=windowTitle(entry,view?.terminal_metadata);
-    button.append(icon('terminal'),name);button.title=name.textContent;
+    const name=document.createElement('span');name.className='tab-label';
+    const title=paintTitle(name,windowTitle(entry,view?.terminal_metadata),view?.terminal_metadata?.[entry.focused_block_id??'']?.title);
+    button.append(icon('terminal'),name);button.title=title;
     button.addEventListener('click',()=>selectHost(host.id,{session:view!.session_id,window:entry.window_id}));
     const close=document.createElement('button');close.className='tab-close';close.append(icon('close'));
-    close.setAttribute('aria-label',`Close tab: ${name.textContent}`);close.title='Close tab and its terminals';
+    close.setAttribute('aria-label',`Close tab: ${title}`);close.title='Close tab and its terminals';
     close.addEventListener('click',()=>void (async()=>{
       close.disabled=true;
       try{
@@ -133,30 +141,40 @@ function backgroundTabs(host:Host){
 function renderGroups(){
   if(!vertical)return;
   const all=groupHosts();
-  const signature=JSON.stringify(all);
+  const merged=groupedLocalHost();
+  const signature=JSON.stringify([all,merged?.id]);
   if(signature!==groupSignature){
     // Keep the actual tab strip alive while its group containers change.
     horizontal.append(tabs);rail.replaceChildren();groups.clear();groupSignature=signature;
-    for(const host of all){
-      const element=document.createElement('section');element.className='host-group';element.dataset.host=host.id;
-      const button=document.createElement('button');button.className='host-group-heading';
-      const name=document.createElement('span');name.textContent=host.label;
-      button.append(icon(host.id?'globe':'device'),name);
-      button.title=`${host.label} · ${hostDescription(host)}`;
-      button.addEventListener('click',()=>selectHost(host.id));
-      const heading=document.createElement('div');heading.className='host-group-row';
-      const create=document.createElement('button');
-      create.type='button';create.className='host-row-action';
-      create.title=`New session on ${host.label}`;
-      create.setAttribute('aria-label',create.title);
-      create.setAttribute('aria-haspopup','dialog');
-      create.append(icon('plus'));
-      create.addEventListener('click',()=>requestSessionCreation(host.id));
-      heading.append(button,create);
+    let sameMachine:HTMLElement|undefined;
+    const ordered=merged?[merged,...hosts.filter(host=>host.id!==merged.id),localHost]:all;
+    for(const host of ordered){
+      const element=document.createElement('section');
+      if(!host.id&&sameMachine){
+        element.className='host-backend';
+        sameMachine.append(element);
+      }else{
+        element.className='host-group';element.dataset.host=host.id;
+        const button=document.createElement('button');button.className='host-group-heading';
+        const name=document.createElement('span');name.textContent=host.label;
+        button.append(icon(host.id?'globe':'device'),name);
+        button.title=`${host.label} · ${hostDescription(host)}`;
+        button.addEventListener('click',()=>selectHost(host.id));
+        const heading=document.createElement('div');heading.className='host-group-row';
+        const create=document.createElement('button');
+        create.type='button';create.className='host-row-action';
+        create.title=`New session on ${host.label}`;
+        create.setAttribute('aria-label',create.title);
+        create.setAttribute('aria-haspopup','dialog');
+        create.append(icon('plus'));
+        create.addEventListener('click',()=>requestSessionCreation(host.id));
+        heading.append(button,create);element.append(heading);rail.append(element);
+        if(host.id===merged?.id)sameMachine=element;
+      }
       const sessions=document.createElement('div');sessions.className='host-sessions';
       const status=document.createElement('div');status.className='host-group-status';status.textContent='No sessions';
       const items=document.createElement('div');items.className='host-group-tabs';
-      element.append(heading,status,sessions,items);rail.append(element);
+      element.append(status,sessions,items);
       groups.set(host.id,{items,sessions,status,rows:new Map()});
     }
   }
@@ -201,7 +219,7 @@ export function updateNavigation(view?:NavigationView){
   }
   const active=view?.windows?.find(w=>w.window_id===view.active_window_id);
   const appTitle = view?.terminal_metadata?.[active?.focused_block_id ?? ""]?.title?.trim();
-  document.querySelector('#content-title')!.textContent = appTitle || (active ? windowTitle(active,view?.terminal_metadata) : "Terminal");
+  paintTitle(document.querySelector('#content-title')!,appTitle || (active ? windowTitle(active,view?.terminal_metadata) : "Terminal"));
   if(vertical){
     const group=groups.get(selectedHost);
     const host=groupHosts().find(host=>host.id===selectedHost);

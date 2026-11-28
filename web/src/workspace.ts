@@ -2,7 +2,7 @@ import type { WebTerminal } from "./webterm/terminal";
 import { bindWorkspaceViewport } from "./viewport";
 import { previewSplit, type Layout, type Rect } from "./layout";
 import { hosts, localHost, selectedHost, selectHost, hostDialogOpen, hostPickerOpen, openHosts } from "./hosts";
-import { updateNavigation, updateNavigationSessions, windowTitle } from "./navigation";
+import { paintTitle, updateNavigation, updateNavigationSessions, windowTitle } from "./navigation";
 import { WorkspaceUpdates } from "./updates";
 import { bindDialog, dismissDialog } from "./dialog";
 
@@ -45,6 +45,10 @@ const windows = document.querySelector<HTMLElement>("#windows")!;
 const workspace = document.querySelector<HTMLElement>("#workspace")!;
 const sessionLoading = document.querySelector<HTMLElement>("#session-loading")!;
 const status = document.querySelector<HTMLElement>("#status")!;
+function showStatus(message: unknown, kind: "info" | "success" | "error" | "connection" = "error") {
+  status.dataset.kind = kind;
+  status.textContent = message instanceof Error ? message.message : String(message);
+}
 const chooser = document.querySelector<HTMLDialogElement>("#chooser")!;
 const filter = document.querySelector<HTMLInputElement>("#chooser-filter")!;
 const chooserItems = document.querySelector<HTMLElement>("#chooser-items")!;
@@ -179,22 +183,25 @@ async function exportFocused(format: 'text'|'html'|'vt') {
     const url=URL.createObjectURL(await response.blob());
     const link=document.createElement('a');link.href=url;link.download=`terminal.${format==='text'?'txt':format}`;link.click();
     setTimeout(()=>URL.revokeObjectURL(url),30000);
-  }catch(error){status.textContent=String(error);}
+  }catch(error){showStatus(error);}
 }
 
 let uploadsEnabled=false;
+let capabilityHost:string|undefined;
 const uploadInput=document.querySelector<HTMLInputElement>('#upload-file')!;
 async function loadCapabilities() {
   const host=selectedHost;
-  uploadsEnabled=false;
-  try {const value=await api<{uploads:boolean}>('/api/capabilities');if(host===selectedHost)uploadsEnabled=!!value.uploads;}catch{}
+  if(capabilityHost===host)return;
+  capabilityHost=host;
+  try {const value=await api<{uploads:boolean}>('/api/capabilities');if(host===selectedHost)uploadsEnabled=!!value.uploads;}
+  catch{if(host===selectedHost)capabilityHost=undefined;}
 }
 async function uploadToPane(file:File,host:string,session:string,block:string):Promise<string|undefined> {
   const body=new FormData();body.append('file',file,file.name);
   const response=await fetch(endpoint('/api/upload?'+new URLSearchParams({session,block}),host),{method:'POST',body});
   const result=await response.json().catch(()=>({}));
   if(!response.ok)throw new Error(result.message??`Upload failed (${response.status})`);
-  status.textContent=`Uploaded ${result.display_name||result.name||file.name}`;
+  showStatus(`Uploaded ${result.display_name||result.name||file.name}`,"success");
   if(result.inserted===true)return;
   if(typeof result.path!=='string')throw new Error('Upload finished without a terminal path');
   return result.path;
@@ -202,10 +209,10 @@ async function uploadToPane(file:File,host:string,session:string,block:string):P
 uploadInput.addEventListener('change',()=>{
   const terminal=panes.get(activeWindow?.focused_block_id??'')?.terminal;
   const files=Array.from(uploadInput.files??[]);uploadInput.value='';
-  if(files.length>8){status.textContent='Select at most eight files.';return;}
-  if(terminal)void (async()=>{for(const file of files)await terminal.uploadFile(file)})().catch(error=>{status.textContent=String(error);});
+  if(files.length>8){showStatus('Select at most eight files.');return;}
+  if(terminal)void (async()=>{for(const file of files)await terminal.uploadFile(file)})().catch(error=>showStatus(error));
 });
-workspace.addEventListener('upload-error',event=>{status.textContent=(event as CustomEvent).detail;});
+workspace.addEventListener('upload-error',event=>showStatus((event as CustomEvent).detail));
 
 function icon(name: string) {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -257,20 +264,22 @@ function updateMetadata(next:View) {
   for (const entry of next.windows ?? []) {
     const label = tabs.get(entry.window_id)?.querySelector('.tab-label');
     if (label) {
-      const title=windowTitle(entry,next.terminal_metadata);
-      if(label.textContent===title)continue;
-      label.textContent=title;
+      const title=paintTitle(label,windowTitle(entry,next.terminal_metadata),next.terminal_metadata?.[entry.focused_block_id??'']?.title);
       const tab=tabs.get(entry.window_id)!;
-      tab.querySelector<HTMLButtonElement>('.tab-select')!.title=title;
+      const select=tab.querySelector<HTMLButtonElement>('.tab-select')!;
+      if(select.title===title)continue;
+      select.title=title;
       tab.querySelector('.tab-close')!.setAttribute('aria-label',`Close tab: ${title}`);
       tab.querySelector<HTMLButtonElement>('.tab-close')!.title=`Close ${title} and its terminals`;
     }
   }
-  updateNavigation(next);
+  updateNavigation(requestedWindow && activeWindow?.window_id===requestedWindow
+    ? {...next,active_window_id:requestedWindow}
+    : next);
   for(const [id,metadata] of Object.entries(next.terminal_metadata??{})){
     const pane=panes.get(id);if(!pane)continue;
     const label=pane.element.querySelector<HTMLElement>('.pane-label');
-    if(label){label.textContent=metadata.title?.trim()||label.dataset.blockLabel||'Terminal';label.title=metadata.pwd||'';}
+    if(label){paintTitle(label,metadata.title?.trim()||label.dataset.blockLabel||'Terminal');label.title=metadata.pwd||'';}
     const badge=pane.element.querySelector<HTMLElement>('.pane-status');
     if(badge){badge.hidden=!metadata.state||metadata.state==='idle';badge.dataset.state=metadata.state;badge.textContent=metadata.state+(metadata.progress!==undefined?` ${metadata.progress}%`:'');badge.title=metadata.message||metadata.status_title||metadata.app||metadata.state;}
   }
@@ -301,9 +310,22 @@ async function refresh() {
   refreshPending=false;
   const generation=refreshGeneration;
   const controller=new AbortController();refreshController=controller;
+  const currentRefresh=()=>generation===refreshGeneration&&!controller.signal.aborted;
+  const readView=async(id:string)=>{
+    const next=await api<View>(`/api/session?${new URLSearchParams({session:id})}`,undefined,controller.signal);
+    if(!currentRefresh()||id!==sessionId)return;
+    if(!dragging&&(!view||next.revision!==view.revision)){
+      view=next;navigating=false;renderIfChanged();
+    }
+    updateMetadata(next);
+  };
+  const requested=sessionId;
+  // When the target is already known, let the view mount its pane while the
+  // session list refreshes. A removed deep link can still fall back to the list.
+  const viewRequest=requested?readView(requested).then(()=>({ok:true as const}),error=>({ok:false as const,error})):undefined;
   try {
     const { sessions: available } = await api<{ sessions: Session[] | null }>("/api/sessions",undefined,controller.signal);
-    if(generation!==refreshGeneration)return;
+    if(!currentRefresh())return;
     const list = available ?? [];
     if (!list.some((entry) => entry.session_id === sessionId)) {
       selectSession(list[0]?.session_id ?? "");
@@ -312,33 +334,32 @@ async function refresh() {
     updateNavigationSessions(list);
     sessionLabel.textContent = list.find((entry) => entry.session_id === sessionId)?.label || "Sessions";
     const id = sessionId;
-    if (id) {
-      const next = await api<View>(`/api/session?${new URLSearchParams({ session: id })}`,undefined,controller.signal);
-      if(generation!==refreshGeneration)return;
-      if (!dragging && id === sessionId && (!view || next.revision !== view.revision)) {
-        view = next;
-        navigating=false;
-        renderIfChanged();
-      }
-      updateMetadata(next);
+    if (id && id===requested && viewRequest) {
+      const result=await viewRequest;
+      if(!result.ok)throw result.error;
+    } else if (id) {
+      await readView(id);
     }
+    if(!currentRefresh())return;
     navigating=false;
     setSessionLoading(false);
     if(!id)renderIfChanged();
-    status.textContent = id ? "" : "Create or select a session.";
+    if(status.dataset.kind==="connection")status.textContent="";
+    void loadCapabilities();
     return true;
   } catch (error) {
     if(controller.signal.aborted||generation!==refreshGeneration)return;
     setSessionLoading(false);
-    status.textContent = String(error);
+    if(status.dataset.kind!=="error"||!status.textContent)showStatus(error,"connection");
     return false;
   } finally {
     loading = false;
     if(refreshController===controller)refreshController=undefined;
-    if(generation===refreshGeneration&&requestedWindow&&view?.windows?.some(w=>w.window_id===requestedWindow)){
+    if(currentRefresh()&&requestedWindow&&view?.windows?.some(w=>w.window_id===requestedWindow)){
       const target=requestedWindow;requestedWindow=undefined;
       if(view.active_window_id!==target)void act('focus-window',{window:target});
     }
+    controller.abort();
     if(refreshPending&&!acting&&!dragging&&visible()){refreshPending=false;queueMicrotask(()=>void refresh());}
   }
 }
@@ -359,7 +380,7 @@ async function act(op: string, args: Record<string, unknown> = {}, host = select
       selectHost(host,{session:args.session,window:result.window_id});
     }
   } catch (error) {
-    if(generation===refreshGeneration)status.textContent = String(error);
+    if(generation===refreshGeneration)showStatus(error);
     return;
   } finally {
     acting = false;
@@ -415,11 +436,13 @@ function mountPane(block: Block, rect: Rect, keep: Set<string>) {
     loader.className = "terminal-loading";
     loader.setAttribute("role", "status");
     loader.textContent = "Loading terminal…";
+    const errorPanel = document.createElement("div");
+    errorPanel.className = "terminal-load-error";
     const errorMessage = document.createElement("span");
-    errorMessage.className = "terminal-load-error";
     errorMessage.setAttribute("role", "status");
     errorMessage.textContent = "Could not connect to the terminal.";
-    viewport.append(terminal, loader, errorMessage);
+    errorPanel.append(errorMessage);
+    viewport.append(terminal, loader, errorPanel);
     element.append(header, viewport);
     workspace.append(element);
     pane = { element };
@@ -599,7 +622,8 @@ function renderLayout(node: Layout, blocks: Map<string, Block>, keep: Set<string
 
 function render() {
   const previousBlock = activeWindow?.focused_block_id;
-  activeWindow = view?.windows?.find((entry) => entry.window_id === view?.active_window_id);
+  const entries=view?.windows??[];
+  activeWindow=entries.find(entry=>entry.window_id===requestedWindow)??entries.find(entry=>entry.window_id===view?.active_window_id);
   const keepTabs=new Set<string>();let cursor=windows.firstElementChild;
   for(const entry of view?.windows??[]){
     keepTabs.add(entry.window_id);
@@ -617,9 +641,8 @@ function render() {
       tab.append(select,close);
       tabs.set(entry.window_id,tab);
     }
-    const label=windowTitle(entry,view?.terminal_metadata);
     const name=tab.querySelector('.tab-label')!;
-    if(name.textContent!==label)name.textContent=label;
+    const label=paintTitle(name,windowTitle(entry,view?.terminal_metadata),view?.terminal_metadata?.[entry.focused_block_id??'']?.title);
     const select=tab.querySelector('button')!;
     select.title=label;
     select.setAttribute("aria-current",String(entry===activeWindow));
@@ -682,7 +705,7 @@ function runCommand(op: string, block = activeWindow?.focused_block_id, initialN
   chooser.close();
   if(op==='upload-file'){uploadInput.click();return;}
   if(op==='previous-prompt'||op==='next-prompt'){
-    if(!panes.get(block??'')?.terminal?.navigatePrompt(op==='previous-prompt'))status.textContent='No retained prompt in that direction.';
+    if(!panes.get(block??'')?.terminal?.navigatePrompt(op==='previous-prompt'))showStatus('No retained prompt in that direction.',"info");
     focusTerminal();return;
   }
   if(op==='export-text'||op==='export-html'||op==='export-vt'){void exportFocused(op.slice(7) as 'text'|'html'|'vt');return;}
@@ -884,7 +907,8 @@ window.addEventListener('rexweb:navigate',(event)=>{
   view=undefined;activeWindow=undefined;presentation='';navigating=true;
   status.textContent = "";
   sessionLabel.textContent='Sessions';
-  render();void loadCapabilities();resumeUpdates();
+  uploadsEnabled=false;capabilityHost=undefined;
+  render();resumeUpdates();
 });
 window.addEventListener('rexweb:focus-window',event=>void act('focus-window',{window:(event as CustomEvent<string>).detail}));
 window.addEventListener('rexweb:create-session',event=>runCommand("create", undefined, "", (event as CustomEvent<string>).detail));
@@ -906,4 +930,5 @@ const visibilityObserver=new IntersectionObserver(([entry])=>{
 visibilityObserver.observe(workspace);
 window.addEventListener('pagehide',()=>{updates.stop();refreshController?.abort();});
 window.addEventListener('pageshow',event=>{if(event.persisted)resumeUpdates();});
-void loadCapabilities();resumeUpdates();
+void import('./webterm/terminal').then(({WebTerminal})=>WebTerminal.warmup()).catch(()=>{});
+resumeUpdates();

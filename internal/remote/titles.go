@@ -35,7 +35,7 @@ func (p *hostPool) readTitle(ctx context.Context, c *control, session, block str
 	if len(initial.Title) > 4096 {
 		initial.Title = ""
 	}
-	initial.Title = vt.DisplayTitle(initial.Title)
+	initial.Title = vt.StableTitle(initial.Title)
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	// An event delivered while the RPC was in flight takes precedence, even
@@ -61,7 +61,7 @@ func (p *hostPool) titleEvent(raw json.RawMessage) {
 	if json.Unmarshal(raw, &block) != nil || block.Creator != terminalCreator || block.Name != "title_changed" || len(block.Payload.Title) > 4096 {
 		return
 	}
-	block.Payload.Title = vt.DisplayTitle(block.Payload.Title)
+	block.Payload.Title = vt.StableTitle(block.Payload.Title)
 	p.mu.Lock()
 	current, tracked := p.titles[block.ID]
 	if tracked {

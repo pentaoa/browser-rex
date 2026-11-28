@@ -30,7 +30,13 @@ try{
  const created=await fetch(origin+'/api/action',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({op:'create',label:'Slow session'})});
  assert(created.ok);const {session_id:target}=await created.json();
  const context=await browser.newContext();const page=await context.newPage();page.on('pageerror',e=>errors.push(String(e)));
- page.on('console',m=>{if(m.type()==='error'&&!m.location().url.endsWith('/favicon.ico'))errors.push(m.text());});
+ let expectedConflict=false;
+ page.on('console',m=>{
+  const url=m.location().url;
+  if(m.type()!=='error'||url.endsWith('/favicon.ico'))return;
+  if(expectedConflict&&url===origin+'/api/action'&&m.text().includes('409 (Conflict)'))return;
+  errors.push(m.text());
+ });
  const metrics=[];
  for(const run of ['cold','warm']){
   const start=Date.now();if(run==='cold')await page.goto(origin);else await page.reload();
@@ -52,6 +58,9 @@ try{
  let releaseView!:()=>void;
  const waitForView=new Promise<void>(resolve=>releaseView=resolve);
  await page.route(targetView,async route=>{await waitForView;await route.continue();});
+ let releaseList!:()=>void;
+ const holdList=new Promise<void>(resolve=>releaseList=resolve);
+ const listRoute=(url:URL)=>url.pathname==='/api/sessions';
  await page.evaluate(targetID=>{
   const BrowserSocket=window.WebSocket;
   window.WebSocket=class extends BrowserSocket {
@@ -68,13 +77,16 @@ try{
   };
  },target);
  await page.keyboard.press('Control+k');
- await page.getByRole('button',{name:'Slow session',exact:true}).click();
- await page.locator('#session-loading').waitFor();
- assert.equal(await page.locator('#workspace').getAttribute('aria-busy'),'true');
- releaseView();
- await page.locator('.pane .terminal-loading').waitFor();
- await page.waitForFunction(()=>document.querySelector('.webterm-terminal canvas')!==null);
- await page.waitForFunction(()=>typeof (window as any).finishTerminalStream==='function');
+ await page.route(listRoute,async route=>{await holdList;await route.continue();});
+ try {
+  await page.locator('#chooser').getByRole('button',{name:'Slow session',exact:true}).click();
+  await page.locator('#session-loading').waitFor();
+  assert.equal(await page.locator('#workspace').getAttribute('aria-busy'),'true');
+  releaseView();
+  await page.locator('.pane .terminal-loading').waitFor();
+  await page.waitForFunction(()=>document.querySelector('.webterm-terminal canvas')!==null);
+  await page.waitForFunction(()=>typeof (window as any).finishTerminalStream==='function');
+ } finally {releaseView();releaseList();}
  assert.equal(await page.locator('.webterm-terminal canvas').first().evaluate(canvas=>getComputedStyle(canvas).visibility),'hidden');
  assert.equal(await page.locator('.pane .terminal-loading').evaluate(loader=>getComputedStyle(loader,'::before').animationName),'terminal-spin');
  await page.emulateMedia({reducedMotion:'reduce'});
@@ -83,7 +95,19 @@ try{
  await page.locator('.webterm-terminal.-connected').waitFor();
  await page.locator('.pane .terminal-loading').waitFor({state:'hidden'});
  assert.equal(await page.locator('.webterm-terminal canvas').first().evaluate(canvas=>getComputedStyle(canvas).visibility),'visible');
- assert.deepEqual(errors,[]);console.log(JSON.stringify({result:'passed',checks:['interactive UI before engine delivery','small UI entry','early single WASM fetch','WOFF2 font','zero warm static transfer','session and pane spinners, hidden cursor until replay, reduced motion'],metrics,browserErrors:errors.length}));
+ await page.route('**/api/action',route=>{
+  expectedConflict=true;
+  return route.fulfill({status:409,json:{message:'The terminal is busy. Try again in a moment.'}});
+ });
+ await page.getByRole('button',{name:'New tab',exact:true}).click();
+ const notice=page.locator('#status[data-kind="error"]');
+ await notice.waitFor();
+ assert.equal(await notice.textContent(),'The terminal is busy. Try again in a moment.');
+ assert.deepEqual(await notice.evaluate(el=>{
+  const style=getComputedStyle(el);
+  return [style.paddingLeft,style.borderLeftWidth];
+ }),['11px','1px']);
+ assert.deepEqual(errors,[]);console.log(JSON.stringify({result:'passed',checks:['interactive UI before engine delivery','small UI entry','early single WASM fetch','WOFF2 font','zero warm static transfer','terminal opens while session list is pending','session and pane spinners, hidden cursor until replay, reduced motion','padded error notice'],metrics,browserErrors:errors.length}));
 }finally{
  if(browser)await browser.close();if(child&&child.exitCode===null){child.kill();await once(child,'exit');}
  await rm(scratch,{recursive:true,force:true});

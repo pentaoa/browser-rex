@@ -1,5 +1,12 @@
 import {visibleFrame} from './viewport';
-export let selectedHost = new URLSearchParams(location.search).get("host") ?? "";
+const initialURL = new URL(location.href);
+const configuredLocalGroup = document.documentElement.dataset.localHostGroup ?? "";
+export let selectedHost = initialURL.searchParams.get("host") ??
+  (initialURL.searchParams.has("session") ? "" : configuredLocalGroup);
+if (selectedHost && !initialURL.searchParams.has("host")) {
+  initialURL.searchParams.set("host", selectedHost);
+  history.replaceState(null, "", initialURL);
+}
 const lastSessions=new Map<string,string>();
 const initialSession=new URLSearchParams(location.search).get('session');
 if(initialSession)lastSessions.set(selectedHost,initialSession);
@@ -13,6 +20,7 @@ const popover = document.querySelector<HTMLElement>("#host-popover")!;
 const hostFilter = document.querySelector<HTMLInputElement>("#host-filter")!;
 const options = document.querySelector<HTMLElement>("#host-options")!;
 export let hosts: Host[] = [];
+export const groupedLocalHost = () => hosts.find(host => host.id === configuredLocalGroup);
 export const hostPickerOpen = () => popover.matches(":popover-open");
 export const preferredSession = (host: string) => lastSessions.get(host);
 let filtered: Host[] = [];
@@ -28,10 +36,10 @@ export function hostDescription(host: Host) {
   return host.id ? new URL(host.endpoint).host : "Built-in shell";
 }
 function updatePicker() {
-  const host = selectedHost ? hosts.find(h => h.id === selectedHost) : localHost;
+  const host = selectedHost ? hosts.find(h => h.id === selectedHost) : groupedLocalHost() ?? localHost;
   picker.dataset.value = selectedHost;
   document.querySelector("#host-label")!.textContent = host?.label ?? "Unavailable host";
-  document.querySelector("#host-detail")!.textContent = host ? hostDescription(host) : selectedHost;
+  document.querySelector("#host-detail")!.textContent = host ? (selectedHost ? hostDescription(host) : hostDescription(localHost)) : selectedHost;
   picker.querySelector(".host-symbol use")!.setAttribute("href", selectedHost ? "#icon-globe" : "#icon-device");
   picker.title = host ? `${host.label} · ${hostDescription(host)}` : "Choose host";
   create.title = `New session on ${host?.label ?? selectedHost}`;
@@ -46,23 +54,25 @@ function highlight(index: number) {
 }
 function renderOptions() {
   const query = hostFilter.value.trim().toLocaleLowerCase();
-  filtered = [localHost, ...hosts].filter(h => `${h.label} ${h.endpoint}`.toLocaleLowerCase().includes(query));
+  const group = groupedLocalHost();
+  filtered = (group ? hosts : [localHost, ...hosts]).filter(h => `${h.label} ${h.endpoint}`.toLocaleLowerCase().includes(query));
   options.replaceChildren();
   filtered.forEach((host,i) => {
     const row = document.createElement("button"); row.type = "button";
     row.className = "host-option"; row.id = `host-option-${i}`; row.tabIndex = -1;
     row.dataset.host = host.id; row.setAttribute("role", "option");
-    row.setAttribute("aria-selected", String(host.id === selectedHost));
+    const current = host.id === (selectedHost || group?.id || "");
+    row.setAttribute("aria-selected", String(current));
     const text = document.createElement("span"); text.className = "host-option-text";
     const title = document.createElement("strong"); title.textContent = host.label;
     const detail = document.createElement("small"); detail.textContent = hostDescription(host);
     text.append(title,detail); row.append(hostIcon(host.id ? "globe" : "device"),text);
-    if (host.id === selectedHost) row.append(hostIcon("check"));
+    if (current) row.append(hostIcon("check"));
     row.addEventListener("pointermove",()=>highlight(i));
     row.addEventListener("click",()=>selectHost(host.id)); options.append(row);
   });
   document.querySelector<HTMLElement>("#host-empty")!.hidden = filtered.length > 0;
-  highlight(Math.max(0,filtered.findIndex(h => h.id === selectedHost)));
+  highlight(Math.max(0,filtered.findIndex(h => h.id === (selectedHost || group?.id || ""))));
 }
 function positionPicker() {
   if (!hostPickerOpen()) return;

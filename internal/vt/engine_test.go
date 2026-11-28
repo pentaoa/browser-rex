@@ -99,12 +99,12 @@ func TestRepliesAndMetadata(t *testing.T) {
 	if info.Prompts[0].Line == info.Prompts[1].Line {
 		t.Fatal("prompt callbacks did not capture distinct rows")
 	}
-	for _, frame := range []string{"⠋", "⠹"} {
+	for i, frame := range []string{"⠋", "⠹"} {
 		if _, err := state.Feed([]byte("\x1b]0;" + frame + " headless-title\x07")); err != nil {
 			t.Fatal(err)
 		}
-		if state.Title() != info.Title || state.Revision() != info.Revision {
-			t.Fatal("title spinner changed the displayed title or metadata revision")
+		if state.Title() != "⠋ "+info.Title || state.Revision() != info.Revision+1 {
+			t.Fatalf("spinner frame %d did not preserve a stable busy title", i)
 		}
 	}
 	if err = state.Resize(93, 31, 8, 16); err != nil {

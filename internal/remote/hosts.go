@@ -139,6 +139,11 @@ func (m *Manager) host(id string) (Host, bool) {
 	return Host{}, false
 }
 
+func (m *Manager) HasHost(id string) bool {
+	_, ok := m.host(id)
+	return ok
+}
+
 func reply(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

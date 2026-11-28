@@ -502,7 +502,7 @@ func (s *State) Feed(data []byte) ([]byte, error) {
 	if s.dirtyTitle {
 		title, _ := s.pullString(ctx, "TITLE")
 		s.dirtyTitle = false
-		if title := DisplayTitle(title); title != s.info.Title {
+		if title := StableTitle(title); title != s.info.Title {
 			s.info.Title = title
 			s.info.Revision++
 		}
@@ -536,12 +536,12 @@ func (s *State) Revision() uint64 {
 	return s.info.Revision
 }
 
-// DisplayTitle removes a leading braille spinner frame followed by a space.
-// Codex uses this prefix to animate its title as it works.
-func DisplayTitle(title string) string {
+// StableTitle preserves the busy marker without treating every animation frame
+// as a new title. A browser can animate the marker without polling the server.
+func StableTitle(title string) string {
 	frame, text, ok := strings.Cut(title, " ")
 	if ok && len(frame) == 3 && strings.Contains("⠇⠋⠙⠹⠸⠼⠴⠦⠧⠏", frame) && text != "" {
-		return strings.TrimSpace(text)
+		return "⠋ " + strings.TrimSpace(text)
 	}
 	return title
 }

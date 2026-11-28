@@ -639,6 +639,10 @@ class WebTerminal {
     document.title = this.baseTitle;
   }
 
+  static async warmup(): Promise<void> {
+    await getSharedGhostty();
+  }
+
   /** Create and initialize a WebTerminal instance */
   static async create(
     container: HTMLElement,
@@ -1110,6 +1114,10 @@ class WebTerminal {
     }
 
     if (this.connectPending) return;
+    if (this.socketGeneration === 0) {
+      this.openSocket();
+      return;
+    }
     this.connectPending = true;
     const epoch = this.streamEpoch;
     this.terminal.write("", () => {
